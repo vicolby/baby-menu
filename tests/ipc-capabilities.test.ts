@@ -216,11 +216,76 @@ describe("capabilities IPC", () => {
 
     await expect(handlers.get("baby-menu:popover:set-content-height")?.({}, 333)).resolves.toEqual({ ok: true });
     expect(popover.setContentHeight).toHaveBeenCalledWith(333);
-    await expect(handlers.get("baby-menu:popover:set-content-size")?.({}, { width: 820, height: 400 })).resolves.toEqual({
+    // Pinned desktop widgets share these channels, so the controller learns which
+    // window is asking from the IPC sender rather than from a per-widget channel.
+    const sender = { id: 7 };
+    await expect(
+      handlers.get("baby-menu:popover:set-content-size")?.({ sender }, { width: 820, height: 400 }),
+    ).resolves.toEqual({
       ok: true,
     });
-    expect(popover.setContentSize).toHaveBeenCalledWith({ width: 820, height: 400 });
-    await expect(handlers.get("baby-menu:popover:get-visibility")?.({})).resolves.toEqual({ visible: false });
+    expect(popover.setContentSize).toHaveBeenCalledWith({ width: 820, height: 400 }, sender);
+    await expect(handlers.get("baby-menu:popover:get-visibility")?.({ sender })).resolves.toEqual({ visible: false });
+    expect(popover.getVisibility).toHaveBeenCalledWith(sender);
+  });
+
+  it("registers generic pin channels that return the pinned widget ids", async () => {
+    const { registerIpcHandlers } = await import("../src/main/ipc");
+    const agentRuntime = {
+      send: vi.fn(),
+      save: vi.fn(),
+      rollback: vi.fn(),
+      currentSessionSnapshot: vi.fn(),
+      currentTurn: vi.fn(),
+    };
+    const pinned = ["clock"];
+    const pinnedWidgets = {
+      list: vi.fn(() => [...pinned]),
+      pin: vi.fn(async (id: string) => void pinned.push(id)),
+      unpin: vi.fn(async (id: string) => void pinned.splice(pinned.indexOf(id), 1)),
+    };
+
+    registerIpcHandlers("/repo", agentRuntime, undefined, undefined, undefined, undefined, undefined, { pinnedWidgets });
+
+    await expect(handlers.get("baby-menu:pinned:list")?.({})).resolves.toEqual(["clock"]);
+    await expect(handlers.get("baby-menu:pinned:pin")?.({}, "weather")).resolves.toEqual(["clock", "weather"]);
+    expect(pinnedWidgets.pin).toHaveBeenCalledWith("weather");
+    await expect(handlers.get("baby-menu:pinned:unpin")?.({}, "clock")).resolves.toEqual(["weather"]);
+    expect(pinnedWidgets.unpin).toHaveBeenCalledWith("clock");
+  });
+
+  it("rejects pin requests without a usable widget id", async () => {
+    const { registerIpcHandlers } = await import("../src/main/ipc");
+    const agentRuntime = {
+      send: vi.fn(),
+      save: vi.fn(),
+      rollback: vi.fn(),
+      currentSessionSnapshot: vi.fn(),
+      currentTurn: vi.fn(),
+    };
+    const pinnedWidgets = { list: vi.fn(() => []), pin: vi.fn(), unpin: vi.fn() };
+
+    registerIpcHandlers("/repo", agentRuntime, undefined, undefined, undefined, undefined, undefined, { pinnedWidgets });
+
+    for (const bad of [undefined, 42, "", "x".repeat(257)]) {
+      await expect(handlers.get("baby-menu:pinned:pin")?.({}, bad)).rejects.toThrow(/widget id/i);
+    }
+    expect(pinnedWidgets.pin).not.toHaveBeenCalled();
+  });
+
+  it("reports no pinned widgets when the host provides no controller", async () => {
+    const { registerIpcHandlers } = await import("../src/main/ipc");
+    const agentRuntime = {
+      send: vi.fn(),
+      save: vi.fn(),
+      rollback: vi.fn(),
+      currentSessionSnapshot: vi.fn(),
+      currentTurn: vi.fn(),
+    };
+
+    registerIpcHandlers("/repo", agentRuntime);
+
+    await expect(handlers.get("baby-menu:pinned:list")?.({})).resolves.toEqual([]);
   });
 
   it("registers an app quit channel", async () => {

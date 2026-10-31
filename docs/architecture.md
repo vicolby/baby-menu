@@ -34,6 +34,12 @@ Provider-specific acquisition and refresh contracts live in the matching recipe.
 Widgets conform to `BabyMenuWidget` / `RefreshableBabyMenuWidget`; `WidgetHost` owns visible-widget refresh timing via `useViewRefresh` and the main-process popover visibility signal, so widgets never start their own polling.
 A root `layout.tsx` default-exports a `BabyMenuLayout`, receives active widget metadata plus `renderWidget(id)`, and owns the canvas arrangement; the popover adapts to the canvas width plus chrome and the rendered height.
 If the popover renderer process dies, `app.ts` reloads it on `render-process-gone` (deferred out of the event, capped by `createRendererReloadBudget` in `src/main/popover.ts`), and the next tray click reloads a renderer the cap gave up on, so the popover never stays a blank window.
+**Pinned desktop widgets.**
+The pin button on a popover widget card pins it into its own always-visible window (`src/main/pinned-widgets.ts`); the same renderer bundle loads with `?pinned=<widget id>` and `PinnedApp` renders just that widget.
+Which widgets are pinned and where is persisted in `~/.baby-menu/pinned-widgets.json` and restored on launch.
+The window uses `setAlwaysOnTop(true, "normal", -1000)`, so it sits above desktop icons and below every normal window; `type: "desktop"` was measured to land under the Finder icon layer and never receives mouse events, so it is not used.
+Pinned renderers are always treated as visible (view refresh never pauses) and receive background-task updates; they size their own window through the generic `popover.setContentSize` route, which main resolves by sender.
+The `window.babyMenu.pinned` bridge (`list`/`pin`/`unpin`) is host-only and is not part of the extension API.
 Settings sections own only their body; `SettingsView` owns the frame and rediscovers sections when settings refresh or the popover reopens.
 Server actions and background tasks are discovered dynamically, so new capabilities need no preload change.
 
@@ -129,6 +135,7 @@ Public extension surfaces are deliberate, tested contracts:
 | `src/main/app.ts` | Lifecycle, popover window, packaged paths, seeding, preferences, agent catalog wiring, protocols, tray, IPC. `package.json#main` points here via `out/main/index.js`; `process.env.VITEST` stops tests from auto-starting the app. |
 | `src/main/app-paths.ts` | Source versus packaged `~/.baby-menu` paths |
 | `src/main/tray.ts`, `popover.ts` | Tray icon; popover window options, adaptive sizing, bounds math, renderer loading |
+| `src/main/pinned-widgets.ts` | Pinned desktop widget windows: options, placement, persisted pin store, per-window resize and broadcast |
 | `src/main/ipc.ts` | All `ipcMain` handlers behind the preload bridge |
 | `src/main/agent-catalog.ts`, `agent-catalog-controller.ts` | Built-in and custom agents, `agents.json` parsing and persistence, availability, live `acpx` registry overrides |
 | `src/main/agent-runtime.ts`, `agent-turn-log.ts` | Agent turns, change-session gating, diff-derived labels, structured per-turn logs |

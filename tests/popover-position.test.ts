@@ -115,6 +115,40 @@ describe("calculatePopoverBounds", () => {
   });
 });
 
+describe("loadPopoverRenderer with a query", () => {
+  it("passes the query to the dev server URL", async () => {
+    const window = createRendererWindow();
+
+    await loadPopoverRenderer(window, "http://localhost:5273/", "/app/out/renderer/index.html", {
+      query: { pinned: "clock widget" },
+    });
+
+    expect(window.loadURL).toHaveBeenCalledWith("http://localhost:5273/?pinned=clock+widget");
+  });
+
+  it("keeps an existing dev URL query when adding one", async () => {
+    const window = createRendererWindow();
+
+    await loadPopoverRenderer(window, "http://localhost:5273/?debug=1", "/app/out/renderer/index.html", {
+      query: { pinned: "clock" },
+    });
+
+    expect(window.loadURL).toHaveBeenCalledWith("http://localhost:5273/?debug=1&pinned=clock");
+  });
+
+  it("passes the query to the renderer file in packaged builds", async () => {
+    const window = createRendererWindow();
+
+    await loadPopoverRenderer(window, "http://localhost:5273/", "/app/out/renderer/index.html", {
+      isPackaged: true,
+      query: { pinned: "clock" },
+    });
+
+    expect(window.loadURL).not.toHaveBeenCalled();
+    expect(window.loadFile).toHaveBeenCalledWith("/app/out/renderer/index.html", { query: { pinned: "clock" } });
+  });
+});
+
 describe("createRendererReloadBudget", () => {
   it("allows a bounded number of reloads per window, then refills as old reloads age out", () => {
     let now = 1_000;

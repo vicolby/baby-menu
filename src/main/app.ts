@@ -9,6 +9,12 @@ import { resolveBabyMenuRuntimePaths } from "./app-paths";
 import { seedExtensionWorkspace } from "./extension-seeder";
 import { registerIpcHandlers } from "./ipc";
 import {
+  createPinnedWidgetOptions,
+  createPinnedWidgetStore,
+  createPinnedWidgetWindows,
+  type PinnedWidgetWindows,
+} from "./pinned-widgets";
+import {
   DEFAULT_POPOVER_SIZE,
   calculatePopoverBounds,
   createPopoverOptions,
@@ -44,6 +50,8 @@ let popoverWindow: BrowserWindow | null = null;
 let activeTray: BabyMenuTray | null = null;
 let latestTrayBounds: Rectangle | null = null;
 let latestPopoverSize: Size = DEFAULT_POPOVER_SIZE;
+// Widgets pinned out of the popover onto the desktop. Created at startup.
+let pinnedWidgets: PinnedWidgetWindows | null = null;
 
 export function getActiveBabyMenuTray(): BabyMenuTray | null {
   return activeTray;
@@ -51,6 +59,19 @@ export function getActiveBabyMenuTray(): BabyMenuTray | null {
 
 function currentDirname(): string {
   return typeof __dirname === "string" ? __dirname : fileURLToPath(new URL(".", import.meta.url));
+}
+
+function recoverFromRendererCrash(window: BrowserWindow, label: string): void {
+  const rendererReloads = createRendererReloadBudget();
+  window.webContents.on("render-process-gone", (_event, details) => {
+    console.error(`[baby-menu] ${label} renderer process gone`, details);
+    if (details.reason === "clean-exit") return;
+    if (!rendererReloads.tryConsume()) return;
+    setImmediate(() => {
+      if (window.isDestroyed()) return;
+      window.webContents.reload();
+    });
+  });
 }
 
 async function createPopoverWindow(): Promise<BrowserWindow> {
@@ -77,16 +98,7 @@ async function createPopoverWindow(): Promise<BrowserWindow> {
   // blank white window until the app is quit. A clean exit only happens on shutdown.
   // The reload is deferred because reloading from inside this event trips a
   // Chromium CHECK and crashes the main process.
-  const rendererReloads = createRendererReloadBudget();
-  popoverWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error("[baby-menu] popover renderer process gone", details);
-    if (details.reason === "clean-exit") return;
-    if (!rendererReloads.tryConsume()) return;
-    setImmediate(() => {
-      if (!popoverWindow || popoverWindow.isDestroyed()) return;
-      popoverWindow.webContents.reload();
-    });
-  });
+  recoverFromRendererCrash(popoverWindow, "popover");
 
   await loadPopoverRenderer(
     popoverWindow,
@@ -96,6 +108,24 @@ async function createPopoverWindow(): Promise<BrowserWindow> {
   );
 
   return popoverWindow;
+}
+
+// A pinned widget is a second window on the same renderer bundle, told which
+// widget to show through `?pinned=<id>`. It stays hidden until main has placed it.
+async function createPinnedWindow(widgetId: string, bounds: Rectangle): Promise<BrowserWindow> {
+  const dirname = currentDirname();
+  const window = new BrowserWindow(createPinnedWidgetOptions(join(dirname, "../preload/index.cjs"), bounds));
+  recoverFromRendererCrash(window, `pinned widget "${widgetId}"`);
+  try {
+    await loadPopoverRenderer(window, process.env.ELECTRON_RENDERER_URL, join(dirname, "../renderer/index.html"), {
+      isPackaged: app.isPackaged,
+      query: { pinned: widgetId },
+    });
+  } catch (error) {
+    if (!window.isDestroyed()) window.destroy();
+    throw error;
+  }
+  return window;
 }
 
 async function togglePopover(trayBounds: Rectangle): Promise<void> {
@@ -146,7 +176,12 @@ function sendPopoverVisibility(visible: boolean): void {
   sendToPopover("baby-menu:popover:visibility", { visible });
 }
 
-function setPopoverContentSize(size: { width: number; height: number }) {
+function setPopoverContentSize(size: { width: number; height: number }, sender?: { id: number }) {
+  // A pinned window reports its own content size; it must never move the popover.
+  if (pinnedWidgets?.owns(sender?.id)) {
+    pinnedWidgets.resize(sender?.id, size);
+    return;
+  }
   const workArea = latestTrayBounds
     ? screen.getDisplayNearestPoint({ x: latestTrayBounds.x, y: latestTrayBounds.y }).workArea
     : undefined;
@@ -306,7 +341,10 @@ export async function startBabyMenuApp(): Promise<void> {
     {
       setContentHeight: setPopoverContentHeight,
       setContentSize: setPopoverContentSize,
-      getVisibility: () => ({ visible: popoverWindow?.isVisible() ?? false }),
+      // A pinned widget is always on screen, so its view refresh never pauses.
+      getVisibility: (sender) => ({
+        visible: pinnedWidgets?.owns(sender?.id) || (popoverWindow?.isVisible() ?? false),
+      }),
     },
     settingsController,
     {
@@ -314,7 +352,20 @@ export async function startBabyMenuApp(): Promise<void> {
       getUpdateStatus: () => updateChecker.getStatus(),
       openReleasePage: () => updateChecker.openReleasePage(),
     },
-    { recipesDir: paths.recipesDir, database, layoutModules },
+    {
+      recipesDir: paths.recipesDir,
+      database,
+      layoutModules,
+      pinnedWidgets: {
+        list: () => pinnedWidgets?.list() ?? [],
+        pin: async (id) => {
+          await pinnedWidgets?.pin(id);
+        },
+        unpin: async (id) => {
+          await pinnedWidgets?.unpin(id);
+        },
+      },
+    },
   );
   activeTray = createBabyMenuTray(
     (bounds) => {
@@ -322,6 +373,14 @@ export async function startBabyMenuApp(): Promise<void> {
     },
     { iconPath: paths.trayIconPath },
   );
+
+  pinnedWidgets = createPinnedWidgetWindows({
+    store: createPinnedWidgetStore(join(paths.appDataRoot, "pinned-widgets.json")),
+    createWindow: createPinnedWindow,
+    getWorkArea: (point) =>
+      (point ? screen.getDisplayNearestPoint(point) : screen.getPrimaryDisplay()).workArea,
+  });
+  await pinnedWidgets.restore();
 
   if (process.env.BABY_MENU_OPEN_POPOVER_ON_START === "1") {
     await togglePopover(activeTray.getBounds());
@@ -338,6 +397,8 @@ export async function startBabyMenuApp(): Promise<void> {
     context: { rootDir: paths.appDataRoot, db: database, notify },
     watchDir: paths.extensionsDir,
     onTaskRun: (extensionId) => {
+      // Pinned widgets are always on screen, so they get every update.
+      pinnedWidgets?.broadcast("baby-menu:background:update", { extensionId });
       if (!popoverWindow?.isVisible()) return;
       sendToPopover("baby-menu:background:update", { extensionId });
     },

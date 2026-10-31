@@ -31,11 +31,30 @@ type AgentRuntimeFacade = Pick<
   send: (prompt: string, options?: BabyMenuAgentRuntimeSendOptions) => Promise<AgentChatResult>;
 };
 
+// The window that sent an IPC request. Pinned desktop widget windows reuse the
+// popover channels, so the controller tells them apart by their web contents id.
+type IpcSender = { id: number };
+
 type PopoverController = {
   setContentHeight: (height: number) => void | Promise<void>;
-  setContentSize: (size: { width: number; height: number }) => void | Promise<void>;
-  getVisibility: () => PopoverVisibilityState | Promise<PopoverVisibilityState>;
+  setContentSize: (size: { width: number; height: number }, sender?: IpcSender) => void | Promise<void>;
+  getVisibility: (sender?: IpcSender) => PopoverVisibilityState | Promise<PopoverVisibilityState>;
 };
+
+type PinnedWidgetsController = {
+  list: () => string[];
+  pin: (widgetId: string) => Promise<void>;
+  unpin: (widgetId: string) => Promise<void>;
+};
+
+const MAX_WIDGET_ID_LENGTH = 256;
+
+function requireWidgetId(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_WIDGET_ID_LENGTH) {
+    throw new Error("A widget id must be a non-empty string of at most 256 characters");
+  }
+  return value;
+}
 
 type SettingsController = {
   get: () => Promise<BabyMenuSettings> | BabyMenuSettings;
@@ -56,6 +75,7 @@ type IpcRuntimeOptions = {
   recipesDir?: string;
   database?: ExtensionDatabase;
   layoutModules?: LayoutModuleRegistry;
+  pinnedWidgets?: PinnedWidgetsController;
 };
 
 export function registerIpcHandlers(
@@ -82,6 +102,11 @@ export function registerIpcHandlers(
   const recipesDir = runtimeOptions.recipesDir ?? getRecipesDir(rootDir);
   const database = runtimeOptions.database ?? createExtensionDatabase(":memory:");
   const layoutModules = runtimeOptions.layoutModules ?? createLayoutModuleRegistry(rootDir);
+  const pinnedWidgets: PinnedWidgetsController = runtimeOptions.pinnedWidgets ?? {
+    list: () => [],
+    pin: async () => undefined,
+    unpin: async () => undefined,
+  };
 
   ipcMain.handle("baby-menu:recipes:list", async (): Promise<RecipeMetadata[]> => {
     return loadRecipes(pathToFileURL(`${recipesDir}/`));
@@ -151,13 +176,27 @@ export function registerIpcHandlers(
     return { ok: true };
   });
 
-  ipcMain.handle("baby-menu:popover:set-content-size", async (_event, size: { width: number; height: number }) => {
-    await popover.setContentSize(size);
+  ipcMain.handle("baby-menu:popover:set-content-size", async (event, size: { width: number; height: number }) => {
+    await popover.setContentSize(size, event.sender);
     return { ok: true };
   });
 
-  ipcMain.handle("baby-menu:popover:get-visibility", async () => {
-    return popover.getVisibility();
+  ipcMain.handle("baby-menu:popover:get-visibility", async (event) => {
+    return popover.getVisibility(event.sender);
+  });
+
+  ipcMain.handle("baby-menu:pinned:list", async () => {
+    return pinnedWidgets.list();
+  });
+
+  ipcMain.handle("baby-menu:pinned:pin", async (_event, widgetId: unknown) => {
+    await pinnedWidgets.pin(requireWidgetId(widgetId));
+    return pinnedWidgets.list();
+  });
+
+  ipcMain.handle("baby-menu:pinned:unpin", async (_event, widgetId: unknown) => {
+    await pinnedWidgets.unpin(requireWidgetId(widgetId));
+    return pinnedWidgets.list();
   });
 
   ipcMain.handle("baby-menu:settings:get", async () => {

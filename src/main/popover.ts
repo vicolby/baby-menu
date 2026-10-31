@@ -4,6 +4,9 @@ type PopoverRendererWindow = Pick<BrowserWindow, "loadURL" | "loadFile">;
 
 type LoadPopoverRendererOptions = {
   isPackaged?: boolean;
+  // Query parameters for the renderer page, e.g. `{ pinned: "<widget id>" }` for a
+  // pinned desktop widget window.
+  query?: Record<string, string>;
 };
 
 export type Size = {
@@ -125,9 +128,15 @@ export async function loadPopoverRenderer(
   options: LoadPopoverRendererOptions = {},
 ) {
   if (rendererUrl && !options.isPackaged && isLocalRendererUrl(rendererUrl)) {
-    await window.loadURL(rendererUrl);
+    const url = new URL(rendererUrl);
+    for (const [key, value] of Object.entries(options.query ?? {})) url.searchParams.set(key, value);
+    await window.loadURL(options.query ? url.toString() : rendererUrl);
     return;
   }
 
+  if (options.query) {
+    await window.loadFile(rendererFile, { query: options.query });
+    return;
+  }
   await window.loadFile(rendererFile);
 }

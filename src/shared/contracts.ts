@@ -298,6 +298,16 @@ export type BabyMenuApi = {
     getVisibility: () => Promise<PopoverVisibilityState>;
     onVisibility: (listener: (state: PopoverVisibilityState) => void) => () => void;
   };
+  // Host-only (not in BabyMenuExtensionApi): pinning is shell chrome around a
+  // widget, so widgets themselves never pin or unpin.
+  pinned: {
+    /** Ids of the widgets currently pinned to the desktop. */
+    list: () => Promise<string[]>;
+    /** Pins a widget into its own always-visible desktop window; resolves to the pinned ids. */
+    pin: (widgetId: string) => Promise<string[]>;
+    /** Closes a widget's desktop window; resolves to the pinned ids. */
+    unpin: (widgetId: string) => Promise<string[]>;
+  };
   settings: {
     get: () => Promise<BabyMenuSettings>;
     setOpenAtLogin: (openAtLogin: boolean) => Promise<BabyMenuSettings>;

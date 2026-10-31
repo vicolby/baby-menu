@@ -7,13 +7,16 @@ import {
   loadExtensionModules,
   type RuntimeModuleImporter,
 } from "../extension-modules";
+import { PinWidgetButton } from "./PinWidgetButton";
 import { useViewRefresh } from "./useViewRefresh";
 
 export type RuntimeWidgetImporter = RuntimeModuleImporter;
 
 const DEFAULT_RUNTIME_REFRESH_INTERVAL_MS = 1000;
 
-function WidgetCard({ widget }: { widget: RefreshableBabyMenuWidget }) {
+// `actions` is host chrome (e.g. the pin button) floated over the card's corner;
+// the extension still owns the card's content.
+export function WidgetCard({ widget, actions }: { widget: RefreshableBabyMenuWidget; actions?: ReactNode }) {
   // Drives automatic refresh only: once each time the popover opens, plus the
   // optional interval while visible. There is no manual refresh control.
   useViewRefresh({
@@ -23,7 +26,19 @@ function WidgetCard({ widget }: { widget: RefreshableBabyMenuWidget }) {
   });
 
   // No host-drawn title: the extension owns its entire area.
-  return <article className="widget">{widget.render()}</article>;
+  return (
+    <article className="widget">
+      {widget.render()}
+      {actions ? <div className="widget-actions">{actions}</div> : null}
+    </article>
+  );
+}
+
+// The built-in getting-started card is an empty-state fallback, not an installed
+// extension, so a pinned window could never find it again: it is not pinnable.
+function PopoverWidgetCard({ widget }: { widget: RefreshableBabyMenuWidget }) {
+  const actions = widget === helloWorldWidget ? undefined : <PinWidgetButton widgetId={widget.id} title={widget.title} />;
+  return <WidgetCard widget={widget} actions={actions} />;
 }
 
 // The built-in layout: the historical stacked column, used whenever the
@@ -33,7 +48,7 @@ function WidgetColumn({ widgets }: { widgets: RefreshableBabyMenuWidget[] }) {
   return (
     <div className="widget-host">
       {widgets.map((widget) => (
-        <WidgetCard key={widget.id} widget={widget} />
+        <PopoverWidgetCard key={widget.id} widget={widget} />
       ))}
     </div>
   );
@@ -66,7 +81,7 @@ function WidgetCanvas({ layout, widgets }: { layout: BabyMenuLayout | null; widg
   const renderWidget = useCallback(
     (id: string): ReactNode => {
       const widget = byId.get(id);
-      return widget ? <WidgetCard widget={widget} /> : null;
+      return widget ? <PopoverWidgetCard widget={widget} /> : null;
     },
     [byId],
   );
@@ -115,7 +130,9 @@ export function WidgetHost({ widgets, runtimeImporter, runtimeRefreshIntervalMs,
   return <WidgetCanvas layout={activeLayout} widgets={visibleWidgets} />;
 }
 
-function useRuntimeWidgets({
+// `loaded` flips once the first discovery pass finished, so a caller can tell
+// "still loading" from "no such widget" (the list is empty in both cases).
+export function useRuntimeWidgetList({
   enabled,
   importer = importRuntimeModule,
   refreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
@@ -124,7 +141,10 @@ function useRuntimeWidgets({
   importer?: RuntimeWidgetImporter;
   refreshIntervalMs?: number;
 }) {
-  const [widgets, setWidgets] = useState<RefreshableBabyMenuWidget[]>([]);
+  const [state, setState] = useState<{ widgets: RefreshableBabyMenuWidget[]; loaded: boolean }>({
+    widgets: [],
+    loaded: false,
+  });
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -132,7 +152,7 @@ function useRuntimeWidgets({
 
     async function refresh() {
       const loadedWidgets = await loadRuntimeWidgets(importer);
-      if (!cancelled) setWidgets(loadedWidgets);
+      if (!cancelled) setState({ widgets: loadedWidgets, loaded: true });
     }
 
     void refresh();
@@ -149,7 +169,11 @@ function useRuntimeWidgets({
     };
   }, [enabled, importer, refreshIntervalMs]);
 
-  return widgets;
+  return state;
+}
+
+function useRuntimeWidgets(options: Parameters<typeof useRuntimeWidgetList>[0]) {
+  return useRuntimeWidgetList(options).widgets;
 }
 
 // Polls for the root layout module on the same cadence as widget discovery, so

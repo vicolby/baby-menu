@@ -68,6 +68,11 @@ const api: BabyMenuApi = {
     getVisibility: () => ipcRenderer.invoke("baby-menu:popover:get-visibility"),
     onVisibility: createEventChannel<PopoverVisibilityState>("baby-menu:popover:visibility"),
   },
+  pinned: {
+    list: () => ipcRenderer.invoke("baby-menu:pinned:list"),
+    pin: (widgetId: string) => ipcRenderer.invoke("baby-menu:pinned:pin", widgetId),
+    unpin: (widgetId: string) => ipcRenderer.invoke("baby-menu:pinned:unpin", widgetId),
+  },
   settings: {
     get: () => ipcRenderer.invoke("baby-menu:settings:get"),
     setOpenAtLogin: (openAtLogin: boolean) => ipcRenderer.invoke("baby-menu:settings:set-open-at-login", openAtLogin),

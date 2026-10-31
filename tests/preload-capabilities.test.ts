@@ -48,6 +48,15 @@ describe("preload capabilities bridge", () => {
     await api.popover.getVisibility();
     expect(invoke).toHaveBeenCalledWith("baby-menu:popover:get-visibility");
 
+    await api.pinned.list();
+    expect(invoke).toHaveBeenCalledWith("baby-menu:pinned:list");
+
+    await api.pinned.pin("clock");
+    expect(invoke).toHaveBeenCalledWith("baby-menu:pinned:pin", "clock");
+
+    await api.pinned.unpin("clock");
+    expect(invoke).toHaveBeenCalledWith("baby-menu:pinned:unpin", "clock");
+
     await api.settings.get();
     expect(invoke).toHaveBeenCalledWith("baby-menu:settings:get");
 

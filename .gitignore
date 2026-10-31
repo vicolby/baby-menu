@@ -43,6 +43,7 @@ extensions-dev/
 # Source-mode runtime state (userDataDir is the repo root in dev/source mode).
 preferences.json
 agents.json
+pinned-widgets.json
 baby-menu.db
 tmp/
 temp/
