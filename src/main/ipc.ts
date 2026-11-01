@@ -36,9 +36,9 @@ type AgentRuntimeFacade = Pick<
 type IpcSender = { id: number };
 
 type PopoverController = {
-  setContentHeight: (height: number) => void | Promise<void>;
-  setContentSize: (size: { width: number; height: number }, sender?: IpcSender) => void | Promise<void>;
-  getVisibility: (sender?: IpcSender) => PopoverVisibilityState | Promise<PopoverVisibilityState>;
+  setContentHeight: (height: number, sender: IpcSender) => void | Promise<void>;
+  setContentSize: (size: { width: number; height: number }, sender: IpcSender) => void | Promise<void>;
+  getVisibility: (sender: IpcSender) => PopoverVisibilityState | Promise<PopoverVisibilityState>;
 };
 
 type PinnedWidgetsController = {
@@ -171,8 +171,8 @@ export function registerIpcHandlers(
     return layoutModules.get();
   });
 
-  ipcMain.handle("baby-menu:popover:set-content-height", async (_event, height: number) => {
-    await popover.setContentHeight(height);
+  ipcMain.handle("baby-menu:popover:set-content-height", async (event, height: number) => {
+    await popover.setContentHeight(height, event.sender);
     return { ok: true };
   });
 

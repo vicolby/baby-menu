@@ -161,9 +161,10 @@ type FakeWindow = PinnedWindow & {
 
 function createFakeWindowFactory() {
   const windows: FakeWindow[] = [];
-  const createWindow = vi.fn(async (_widgetId: string, bounds: Rectangle) => {
+  const createWindow = vi.fn((_widgetId: string, bounds: Rectangle) => {
     const listeners = new Map<string, () => void>();
     const calls: string[] = [];
+    let destroyed = false;
     const window: FakeWindow = {
       bounds,
       crashed: false,
@@ -172,7 +173,7 @@ function createFakeWindowFactory() {
         isCrashed: () => window.crashed,
         send: vi.fn(),
       },
-      isDestroyed: vi.fn(() => false),
+      isDestroyed: vi.fn(() => destroyed),
       getBounds: vi.fn(() => window.bounds),
       setBounds: vi.fn((next: Rectangle) => {
         window.bounds = next;
@@ -180,7 +181,14 @@ function createFakeWindowFactory() {
       setAlwaysOnTop: vi.fn(() => void calls.push("level")),
       setVisibleOnAllWorkspaces: vi.fn(() => void calls.push("workspaces")),
       showInactive: vi.fn(() => void calls.push("show")),
-      close: vi.fn(() => window.emit("closed")),
+      close: vi.fn(() => {
+        destroyed = true;
+        window.emit("closed");
+      }),
+      destroy: vi.fn(() => {
+        destroyed = true;
+        window.emit("closed");
+      }),
       on: vi.fn((event: string, listener: () => void) => {
         listeners.set(event, listener);
         return window;
@@ -191,7 +199,18 @@ function createFakeWindowFactory() {
     windows.push(window);
     return window;
   });
-  return { windows, createWindow };
+  const loadWindow = vi.fn(async (_window: FakeWindow, _widgetId: string) => undefined);
+  return { windows, createWindow, loadWindow };
+}
+
+// Holds every window load until `release` is called, like a slow renderer.
+function gateLoads(loadWindow: ReturnType<typeof createFakeWindowFactory>["loadWindow"]) {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => void (release = resolve));
+  loadWindow.mockImplementation(async () => {
+    await gate;
+  });
+  return () => release();
 }
 
 async function setup(initial: Array<{ id: string; x?: number; y?: number }> = []) {
@@ -202,6 +221,7 @@ async function setup(initial: Array<{ id: string; x?: number; y?: number }> = []
   const controller = createPinnedWidgetWindows({
     store,
     createWindow: factory.createWindow,
+    loadWindow: factory.loadWindow,
     getWorkArea: () => WORK_AREA,
   });
   return { store, controller, ...factory };
@@ -249,16 +269,95 @@ describe("createPinnedWidgetWindows", () => {
     });
   });
 
-  it("does not leave a stuck pin behind when the window cannot be created", async () => {
-    const { controller, store, createWindow } = await setup();
-    createWindow.mockRejectedValueOnce(new Error("renderer failed to load"));
+  it("does not leave a stuck pin behind when the window cannot be loaded", async () => {
+    const { controller, store, windows, loadWindow } = await setup();
+    loadWindow.mockRejectedValueOnce(new Error("renderer failed to load"));
 
     await expect(controller.pin("clock")).rejects.toThrow("renderer failed to load");
 
+    expect(windows[0]!.destroy).toHaveBeenCalledOnce();
+    expect(controller.owns(windows[0]!.webContents.id)).toBe(false);
     await expect(store.list()).resolves.toEqual([]);
     expect(controller.list()).toEqual([]);
     await controller.pin("clock");
     expect(controller.list()).toEqual(["clock"]);
+  });
+
+  // The renderer starts sending IPC (content size, visibility) while it loads, so
+  // its window must already be recognised; otherwise main mistakes it for the popover.
+  it("claims a window's renderer from the moment it is created, before it has loaded", async () => {
+    const { controller, windows, loadWindow } = await setup();
+    const release = gateLoads(loadWindow);
+
+    const pinning = controller.pin("clock");
+    await vi.waitFor(() => expect(loadWindow).toHaveBeenCalled());
+    const [window] = windows;
+
+    expect(controller.owns(window!.webContents.id)).toBe(true);
+    controller.resize(window!.webContents.id, { width: 360, height: 90 });
+    expect(window!.bounds).toMatchObject({ width: 360, height: 90 });
+    expect(window!.showInactive).not.toHaveBeenCalled();
+
+    release();
+    await pinning;
+    expect(window!.showInactive).toHaveBeenCalledOnce();
+  });
+
+  it("keeps recognising a window that is still closing after an unpin", async () => {
+    const { controller, windows } = await setup();
+    await controller.pin("clock");
+    const [closing] = windows;
+    // A real window closes asynchronously; its renderer can still send IPC meanwhile.
+    vi.mocked(closing!.close).mockImplementation(() => undefined);
+
+    await controller.unpin("clock");
+    await controller.pin("clock");
+    const [, reopened] = windows;
+
+    expect(controller.owns(closing!.webContents.id)).toBe(true);
+    controller.resize(closing!.webContents.id, { width: 360, height: 300 });
+    expect(reopened!.setBounds).not.toHaveBeenCalled();
+
+    closing!.emit("closed");
+    expect(controller.owns(closing!.webContents.id)).toBe(false);
+    expect(controller.owns(reopened!.webContents.id)).toBe(true);
+    expect(controller.list()).toEqual(["clock"]);
+  });
+
+  it("ends pinned with a window when pin, unpin and pin race on a slow window", async () => {
+    const { controller, store, windows, loadWindow } = await setup();
+    const release = gateLoads(loadWindow);
+
+    const first = controller.pin("clock");
+    await vi.waitFor(() => expect(loadWindow).toHaveBeenCalled());
+    const unpinning = controller.unpin("clock");
+    const second = controller.pin("clock");
+    release();
+    await Promise.all([first, unpinning, second]);
+
+    await expect(store.list()).resolves.toEqual([{ id: "clock" }]);
+    expect(controller.list()).toEqual(["clock"]);
+    const open = windows.filter((window) => !window.isDestroyed());
+    expect(open).toHaveLength(1);
+    expect(open[0]!.showInactive).toHaveBeenCalledOnce();
+  });
+
+  it("ends unpinned without a window when unpin, pin and unpin race on a slow window", async () => {
+    const { controller, store, windows, loadWindow } = await setup();
+    await controller.pin("clock");
+    loadWindow.mockClear();
+    const release = gateLoads(loadWindow);
+
+    const first = controller.unpin("clock");
+    const pinning = controller.pin("clock");
+    await vi.waitFor(() => expect(loadWindow).toHaveBeenCalledTimes(1));
+    const second = controller.unpin("clock");
+    release();
+    await Promise.all([first, pinning, second]);
+
+    await expect(store.list()).resolves.toEqual([]);
+    expect(controller.list()).toEqual([]);
+    expect(windows.every((window) => window.isDestroyed())).toBe(true);
   });
 
   it("closes the window and forgets the pin on unpin", async () => {
@@ -274,17 +373,11 @@ describe("createPinnedWidgetWindows", () => {
   });
 
   it("closes a window that was still being created when the user unpinned it", async () => {
-    const { controller, store, windows, createWindow } = await setup();
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => void (release = resolve));
-    const realCreate = createWindow.getMockImplementation()!;
-    createWindow.mockImplementationOnce(async (widgetId, bounds) => {
-      await gate;
-      return realCreate(widgetId, bounds);
-    });
+    const { controller, store, windows, loadWindow } = await setup();
+    const release = gateLoads(loadWindow);
 
     const pinning = controller.pin("clock");
-    await vi.waitFor(() => expect(createWindow).toHaveBeenCalled());
+    await vi.waitFor(() => expect(loadWindow).toHaveBeenCalled());
     const unpinning = controller.unpin("clock");
     // The window finishes loading only after the unpin has already been persisted.
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -327,8 +420,8 @@ describe("createPinnedWidgetWindows", () => {
   });
 
   it("keeps restoring the rest when one widget fails to open", async () => {
-    const { controller, createWindow } = await setup([{ id: "broken" }, { id: "clock" }]);
-    createWindow.mockRejectedValueOnce(new Error("boom"));
+    const { controller, loadWindow } = await setup([{ id: "broken" }, { id: "clock" }]);
+    loadWindow.mockRejectedValueOnce(new Error("boom"));
     const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await controller.restore();
@@ -339,8 +432,8 @@ describe("createPinnedWidgetWindows", () => {
   });
 
   it("keeps a widget pinned after a failed restore so the next launch retries it", async () => {
-    const { controller, createWindow, store } = await setup([{ id: "broken" }]);
-    createWindow.mockRejectedValueOnce(new Error("boom"));
+    const { controller, loadWindow, store } = await setup([{ id: "broken" }]);
+    loadWindow.mockRejectedValueOnce(new Error("boom"));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await controller.restore();

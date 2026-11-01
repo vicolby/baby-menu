@@ -214,11 +214,13 @@ describe("capabilities IPC", () => {
 
     registerIpcHandlers("/repo", agentRuntime, undefined, undefined, popover);
 
-    await expect(handlers.get("baby-menu:popover:set-content-height")?.({}, 333)).resolves.toEqual({ ok: true });
-    expect(popover.setContentHeight).toHaveBeenCalledWith(333);
     // Pinned desktop widgets share these channels, so the controller learns which
     // window is asking from the IPC sender rather than from a per-widget channel.
     const sender = { id: 7 };
+    await expect(handlers.get("baby-menu:popover:set-content-height")?.({ sender }, 333)).resolves.toEqual({
+      ok: true,
+    });
+    expect(popover.setContentHeight).toHaveBeenCalledWith(333, sender);
     await expect(
       handlers.get("baby-menu:popover:set-content-size")?.({ sender }, { width: 820, height: 400 }),
     ).resolves.toEqual({

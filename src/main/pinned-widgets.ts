@@ -178,14 +178,19 @@ export type PinnedWindow = {
   setVisibleOnAllWorkspaces: (visible: boolean) => void;
   showInactive: () => void;
   close: () => void;
+  destroy: () => void;
   on(event: "moved", listener: () => void): unknown;
   on(event: "closed", listener: () => void): unknown;
 };
 
-export type PinnedWidgetWindowsOptions = {
+export type PinnedWidgetWindowsOptions<W extends PinnedWindow> = {
   store: PinnedWidgetStore;
-  // Creates the window and resolves once its renderer has loaded, still hidden.
-  createWindow: (widgetId: string, bounds: Rectangle) => Promise<PinnedWindow>;
+  // Creates the hidden window. Synchronous on purpose: the window is claimed (see
+  // `owns`) before its renderer runs, because the renderer starts sending IPC
+  // while it loads and an unclaimed sender would be mistaken for the popover.
+  createWindow: (widgetId: string, bounds: Rectangle) => W;
+  // Loads the widget's renderer into a window from `createWindow`.
+  loadWindow: (window: W, widgetId: string) => Promise<void>;
   getWorkArea: (point?: { x: number; y: number }) => Rectangle;
 };
 
@@ -199,16 +204,22 @@ export type PinnedWidgetWindows = {
   broadcast: (channel: string, payload: unknown) => void;
 };
 
-export function createPinnedWidgetWindows({
+export function createPinnedWidgetWindows<W extends PinnedWindow>({
   store,
   createWindow,
+  loadWindow,
   getWorkArea,
-}: PinnedWidgetWindowsOptions): PinnedWidgetWindows {
-  const windows = new Map<string, PinnedWindow>();
-  const widgetByContentsId = new Map<number, string>();
-  const opening = new Map<string, Promise<void>>();
+}: PinnedWidgetWindowsOptions<W>): PinnedWidgetWindows {
+  // The window currently pinned for each widget, from creation until unpin or close.
+  const windows = new Map<string, W>();
+  // Every pinned window whose renderer may still send IPC, by web contents id. A
+  // window stays here until it has actually closed, even after an unpin, so a
+  // closing renderer is never mistaken for the popover or for its replacement.
+  const windowByContentsId = new Map<number, W>();
+  // The tail of each widget's pin/unpin/restore queue.
+  const queues = new Map<string, Promise<void>>();
 
-  function liveWindow(id: string): PinnedWindow | undefined {
+  function liveWindow(id: string): W | undefined {
     const window = windows.get(id);
     return window && !window.isDestroyed() ? window : undefined;
   }
@@ -217,35 +228,50 @@ export function createPinnedWidgetWindows({
     return [...windows.values()].filter((window) => !window.isDestroyed()).map((window) => window.getBounds());
   }
 
-  function open(id: string, bounds: Rectangle): Promise<void> {
-    if (liveWindow(id)) return Promise.resolve();
-    const pending = opening.get(id);
-    if (pending) return pending;
+  // Runs one widget's operations strictly in order, so a pin, an unpin and a
+  // second pin fired back to back leave the store and the windows in agreement.
+  function serialize(id: string, operation: () => Promise<void>): Promise<void> {
+    const result = (queues.get(id) ?? Promise.resolve()).then(operation);
+    const tail = result.catch(() => undefined);
+    queues.set(id, tail);
+    void tail.then(() => {
+      if (queues.get(id) === tail) queues.delete(id);
+    });
+    return result;
+  }
 
-    const task = (async () => {
-      const window = await createWindow(id, bounds);
-      // Everything that shapes how the widget sits on the desktop is in place
-      // before it appears, so it never flashes over normal windows.
-      window.setAlwaysOnTop(true, "normal", PINNED_WIDGET_RELATIVE_LEVEL);
-      window.setVisibleOnAllWorkspaces(true);
-      // webContents is gone once the window is destroyed, so capture the id now.
-      const contentsId = window.webContents.id;
-      windows.set(id, window);
-      widgetByContentsId.set(contentsId, id);
-      window.on("moved", () => {
-        const { x, y } = window.getBounds();
-        void store.setPosition(id, { x, y }).catch((error) => {
-          console.error("[baby-menu] failed to save pinned widget position", error);
-        });
+  async function open(id: string, bounds: Rectangle): Promise<void> {
+    if (liveWindow(id)) return;
+
+    const window = createWindow(id, bounds);
+    // webContents is gone once the window is destroyed, so capture the id now.
+    const contentsId = window.webContents.id;
+    windows.set(id, window);
+    windowByContentsId.set(contentsId, window);
+    const forget = () => {
+      if (windows.get(id) === window) windows.delete(id);
+      windowByContentsId.delete(contentsId);
+    };
+    window.on("moved", () => {
+      const { x, y } = window.getBounds();
+      void store.setPosition(id, { x, y }).catch((error) => {
+        console.error("[baby-menu] failed to save pinned widget position", error);
       });
-      window.on("closed", () => {
-        if (windows.get(id) === window) windows.delete(id);
-        widgetByContentsId.delete(contentsId);
-      });
-      window.showInactive();
-    })().finally(() => opening.delete(id));
-    opening.set(id, task);
-    return task;
+    });
+    window.on("closed", forget);
+    // Everything that shapes how the widget sits on the desktop is in place
+    // before it appears, so it never flashes over normal windows.
+    window.setAlwaysOnTop(true, "normal", PINNED_WIDGET_RELATIVE_LEVEL);
+    window.setVisibleOnAllWorkspaces(true);
+
+    try {
+      await loadWindow(window, id);
+    } catch (error) {
+      forget();
+      if (!window.isDestroyed()) window.destroy();
+      throw error;
+    }
+    if (!window.isDestroyed()) window.showInactive();
   }
 
   function newWidgetBounds(): Rectangle {
@@ -259,14 +285,16 @@ export function createPinnedWidgetWindows({
       // relative to the ones already placed.
       for (const record of await store.list()) {
         try {
-          const bounds =
-            record.x !== undefined && record.y !== undefined
-              ? clampToWorkArea(
-                  { x: record.x, y: record.y, ...DEFAULT_PINNED_WIDGET_SIZE },
-                  getWorkArea({ x: record.x, y: record.y }),
-                )
-              : newWidgetBounds();
-          await open(record.id, bounds);
+          await serialize(record.id, () => {
+            const bounds =
+              record.x !== undefined && record.y !== undefined
+                ? clampToWorkArea(
+                    { x: record.x, y: record.y, ...DEFAULT_PINNED_WIDGET_SIZE },
+                    getWorkArea({ x: record.x, y: record.y }),
+                  )
+                : newWidgetBounds();
+            return open(record.id, bounds);
+          });
         } catch (error) {
           // Stays pinned in the store, so the next launch retries it.
           console.error(`[baby-menu] failed to restore pinned widget "${record.id}"`, error);
@@ -274,38 +302,34 @@ export function createPinnedWidgetWindows({
       }
     },
 
-    async pin(id) {
-      if (liveWindow(id)) return;
-      await store.pin(id);
-      try {
-        await open(id, newWidgetBounds());
-      } catch (error) {
-        await store.unpin(id);
-        throw error;
-      }
-    },
+    pin: (id) =>
+      serialize(id, async () => {
+        if (liveWindow(id)) return;
+        await store.pin(id);
+        try {
+          await open(id, newWidgetBounds());
+        } catch (error) {
+          await store.unpin(id);
+          throw error;
+        }
+      }),
 
-    async unpin(id) {
-      await store.unpin(id);
-      // A window still being created registers itself once loaded; wait for it so
-      // it is closed here instead of appearing after the user already unpinned.
-      await opening.get(id)?.catch(() => undefined);
-      const window = windows.get(id);
-      windows.delete(id);
-      for (const [contentsId, widgetId] of widgetByContentsId) {
-        if (widgetId === id) widgetByContentsId.delete(contentsId);
-      }
-      if (window && !window.isDestroyed()) window.close();
-    },
+    unpin: (id) =>
+      serialize(id, async () => {
+        await store.unpin(id);
+        const window = windows.get(id);
+        windows.delete(id);
+        // The window leaves `windowByContentsId` only once it has really closed.
+        if (window && !window.isDestroyed()) window.close();
+      }),
 
     list: () => [...windows.keys()].filter((id) => liveWindow(id)),
 
-    owns: (webContentsId) => webContentsId !== undefined && widgetByContentsId.has(webContentsId),
+    owns: (webContentsId) => webContentsId !== undefined && windowByContentsId.has(webContentsId),
 
     resize(webContentsId, size) {
-      const id = webContentsId === undefined ? undefined : widgetByContentsId.get(webContentsId);
-      const window = id === undefined ? undefined : liveWindow(id);
-      if (!window) return;
+      const window = webContentsId === undefined ? undefined : windowByContentsId.get(webContentsId);
+      if (!window || window.isDestroyed()) return;
 
       const current = window.getBounds();
       const workArea = getWorkArea({ x: current.x, y: current.y });

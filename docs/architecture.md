@@ -38,7 +38,9 @@ If the popover renderer process dies, `app.ts` reloads it on `render-process-gon
 The pin button on a popover widget card pins it into its own always-visible window (`src/main/pinned-widgets.ts`); the same renderer bundle loads with `?pinned=<widget id>` and `PinnedApp` renders just that widget.
 Which widgets are pinned and where is persisted in `~/.baby-menu/pinned-widgets.json` and restored on launch.
 The window uses `setAlwaysOnTop(true, "normal", -1000)`, so it sits above desktop icons and below every normal window; `type: "desktop"` was measured to land under the Finder icon layer and never receives mouse events, so it is not used.
-Pinned renderers are always treated as visible (view refresh never pauses) and receive background-task updates; they size their own window through the generic `popover.setContentSize` route, which main resolves by sender.
+Pinned renderers are always treated as visible (view refresh never pauses) and receive background-task updates; they size their own window through the generic `popover.setContentSize`/`setContentHeight` routes, which main resolves by sender.
+A pinned window is claimed by its web contents id from creation until it has actually closed, so its renderer can never resize the popover; a sender that is neither the popover nor a pinned window is ignored.
+Pin, unpin and restore for one widget run strictly in order.
 The `window.babyMenu.pinned` bridge (`list`/`pin`/`unpin`) is host-only and is not part of the extension API.
 Settings sections own only their body; `SettingsView` owns the frame and rediscovers sections when settings refresh or the popover reopens.
 Server actions and background tasks are discovered dynamically, so new capabilities need no preload change.

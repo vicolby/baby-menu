@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Rectangle } from "electron";
 
@@ -35,8 +38,9 @@ const browserWindowInstance = {
   on: vi.fn(),
   loadFile: vi.fn(async () => undefined),
   loadURL: vi.fn(async () => undefined),
-  webContents: { send: vi.fn(), on: vi.fn(), reload: vi.fn(), isCrashed: vi.fn(() => false) },
+  webContents: { id: 1, send: vi.fn(), on: vi.fn(), reload: vi.fn(), isCrashed: vi.fn(() => false) },
 };
+const popoverSender = { id: browserWindowInstance.webContents.id };
 const BrowserWindow = vi.fn(function BrowserWindowMock() {
   return browserWindowInstance;
 });
@@ -253,7 +257,7 @@ describe("startBabyMenuApp", () => {
     await onTrayClick?.({ x: 100, y: 10, width: 24, height: 24 });
     await vi.waitFor(() => expect(browserWindowInstance.setBounds).toHaveBeenCalled());
 
-    popoverController.setContentHeight(333);
+    popoverController.setContentHeight(333, popoverSender);
 
     expect(browserWindowInstance.setBounds).toHaveBeenLastCalledWith({ x: 8, y: 42, width: 504, height: 333 });
   });
@@ -265,7 +269,7 @@ describe("startBabyMenuApp", () => {
     const onTrayClick = createBabyMenuTray.mock.calls.at(-1)?.[0];
     browserWindowInstance.loadFile.mockImplementationOnce(async () => {
       const popoverController = registerIpcHandlers.mock.calls.at(-1)?.[4];
-      popoverController.setContentSize({ width: 2000, height: 300 });
+      popoverController.setContentSize({ width: 2000, height: 300 }, popoverSender);
     });
 
     await onTrayClick?.({ x: 100, y: 10, width: 24, height: 24 });
@@ -473,6 +477,97 @@ describe("startBabyMenuApp", () => {
       expect(browserWindowInstance.webContents.reload).toHaveBeenCalledTimes(4);
       expect(browserWindowInstance.hide).not.toHaveBeenCalled();
       expect(browserWindowInstance.show).toHaveBeenCalled();
+    });
+  });
+
+  // Pinned desktop widgets load the same renderer and share the popover's size and
+  // visibility channels, so main must route those requests by the sending window.
+  describe("popover IPC routing by sender", () => {
+    const pinnedSender = { id: 2 };
+    let appDataRoot: string;
+
+    function createPinnedWindowMock() {
+      return {
+        isDestroyed: vi.fn(() => false),
+        getBounds: vi.fn(() => ({ x: 900, y: 40, width: 360, height: 160 })),
+        setBounds: vi.fn(),
+        setAlwaysOnTop: vi.fn(),
+        setVisibleOnAllWorkspaces: vi.fn(),
+        showInactive: vi.fn(),
+        close: vi.fn(),
+        destroy: vi.fn(),
+        on: vi.fn(),
+        loadFile: vi.fn(async () => undefined),
+        loadURL: vi.fn(async () => undefined),
+        webContents: { id: pinnedSender.id, send: vi.fn(), on: vi.fn(), reload: vi.fn(), isCrashed: vi.fn(() => false) },
+      };
+    }
+
+    // Starts the app with one widget restored from the saved pins, then opens the popover.
+    async function startWithPinnedWidget(pinned = createPinnedWindowMock()) {
+      await writeFile(
+        join(appDataRoot, "pinned-widgets.json"),
+        JSON.stringify({ widgets: [{ id: "clock", x: 900, y: 40 }] }),
+      );
+      BrowserWindow.mockImplementationOnce(function PinnedWindowMock() {
+        return pinned as unknown as typeof browserWindowInstance;
+      });
+      const appModule = await import("../src/main/app");
+      await appModule.startBabyMenuApp();
+      expect(pinned.showInactive).toHaveBeenCalled();
+      const onTrayClick = createBabyMenuTray.mock.calls.at(-1)?.[0];
+      await onTrayClick?.({ x: 100, y: 10, width: 24, height: 24 });
+      await vi.waitFor(() => expect(browserWindowInstance.show).toHaveBeenCalled());
+      browserWindowInstance.setBounds.mockClear();
+      return { pinned, popoverController: registerIpcHandlers.mock.calls.at(-1)?.[4] };
+    }
+
+    beforeEach(async () => {
+      appDataRoot = await mkdtemp(join(tmpdir(), "baby-menu-app-"));
+      const { getRepoRoot } = await import("../src/shared/paths");
+      vi.mocked(getRepoRoot).mockReturnValue(appDataRoot);
+    });
+
+    afterEach(async () => {
+      await rm(appDataRoot, { recursive: true, force: true });
+    });
+
+    it("never resizes or moves the popover for a pinned widget, even through the height-only call", async () => {
+      const { pinned, popoverController } = await startWithPinnedWidget();
+
+      await popoverController.setContentHeight(700, pinnedSender);
+      await popoverController.setContentSize({ width: 360, height: 200 }, pinnedSender);
+
+      expect(browserWindowInstance.setBounds).not.toHaveBeenCalled();
+      expect(pinned.setBounds).toHaveBeenCalledWith(expect.objectContaining({ width: 360, height: 700 }));
+      expect(pinned.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({ width: 360, height: 200 }));
+    });
+
+    it("ignores size reports from a renderer that is neither the popover nor a pinned widget", async () => {
+      const { pinned, popoverController } = await startWithPinnedWidget();
+      browserWindowInstance.isVisible.mockReturnValue(true);
+      const stranger = { id: 999 };
+
+      await popoverController.setContentHeight(700, stranger);
+      await popoverController.setContentSize({ width: 800, height: 700 }, stranger);
+
+      expect(browserWindowInstance.setBounds).not.toHaveBeenCalled();
+      expect(pinned.setBounds).not.toHaveBeenCalled();
+      expect(await popoverController.getVisibility(stranger)).toEqual({ visible: false });
+      expect(await popoverController.getVisibility(popoverSender)).toEqual({ visible: true });
+    });
+
+    it("treats a pinned widget as visible while its renderer is still loading", async () => {
+      const pinned = createPinnedWindowMock();
+      let visibilityDuringLoad: unknown;
+      pinned.loadFile.mockImplementationOnce(async () => {
+        const popoverController = registerIpcHandlers.mock.calls.at(-1)?.[4];
+        visibilityDuringLoad = await popoverController.getVisibility(pinnedSender);
+      });
+
+      await startWithPinnedWidget(pinned);
+
+      expect(visibilityDuringLoad).toEqual({ visible: true });
     });
   });
 });

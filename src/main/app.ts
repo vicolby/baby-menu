@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BabyMenuCustomAgentInput, BabyMenuSettings } from "../shared/contracts";
 import { getRepoRoot } from "../shared/paths";
+import { PINNED_WIDGET_WIDTH } from "../shared/pinned-widget";
 import { createAgentCatalogController } from "./agent-catalog-controller";
 import { BabyMenuAgentRuntime, commandExists } from "./agent-runtime";
 import { resolveBabyMenuRuntimePaths } from "./app-paths";
@@ -112,20 +113,17 @@ async function createPopoverWindow(): Promise<BrowserWindow> {
 
 // A pinned widget is a second window on the same renderer bundle, told which
 // widget to show through `?pinned=<id>`. It stays hidden until main has placed it.
-async function createPinnedWindow(widgetId: string, bounds: Rectangle): Promise<BrowserWindow> {
-  const dirname = currentDirname();
-  const window = new BrowserWindow(createPinnedWidgetOptions(join(dirname, "../preload/index.cjs"), bounds));
+function createPinnedWindow(widgetId: string, bounds: Rectangle): BrowserWindow {
+  const window = new BrowserWindow(createPinnedWidgetOptions(join(currentDirname(), "../preload/index.cjs"), bounds));
   recoverFromRendererCrash(window, `pinned widget "${widgetId}"`);
-  try {
-    await loadPopoverRenderer(window, process.env.ELECTRON_RENDERER_URL, join(dirname, "../renderer/index.html"), {
-      isPackaged: app.isPackaged,
-      query: { pinned: widgetId },
-    });
-  } catch (error) {
-    if (!window.isDestroyed()) window.destroy();
-    throw error;
-  }
   return window;
+}
+
+async function loadPinnedWindow(window: BrowserWindow, widgetId: string): Promise<void> {
+  await loadPopoverRenderer(window, process.env.ELECTRON_RENDERER_URL, join(currentDirname(), "../renderer/index.html"), {
+    isPackaged: app.isPackaged,
+    query: { pinned: widgetId },
+  });
 }
 
 async function togglePopover(trayBounds: Rectangle): Promise<void> {
@@ -176,12 +174,23 @@ function sendPopoverVisibility(visible: boolean): void {
   sendToPopover("baby-menu:popover:visibility", { visible });
 }
 
-function setPopoverContentSize(size: { width: number; height: number }, sender?: { id: number }) {
+// Which of baby-menu's windows sent a popover IPC call. Pinned widgets share the
+// popover's renderer bundle and bridge, so the sender is the only thing that tells
+// them apart; anything unrecognised is neither and must not touch either window.
+function popoverIpcSource(sender: { id: number }): "popover" | "pinned" | null {
+  if (pinnedWidgets?.owns(sender.id)) return "pinned";
+  if (popoverWindow && !popoverWindow.isDestroyed() && popoverWindow.webContents.id === sender.id) return "popover";
+  return null;
+}
+
+function setPopoverContentSize(size: { width: number; height: number }, sender: { id: number }) {
+  const source = popoverIpcSource(sender);
   // A pinned window reports its own content size; it must never move the popover.
-  if (pinnedWidgets?.owns(sender?.id)) {
-    pinnedWidgets.resize(sender?.id, size);
+  if (source === "pinned") {
+    pinnedWidgets?.resize(sender.id, size);
     return;
   }
+  if (source !== "popover") return;
   const workArea = latestTrayBounds
     ? screen.getDisplayNearestPoint({ x: latestTrayBounds.x, y: latestTrayBounds.y }).workArea
     : undefined;
@@ -194,8 +203,9 @@ function setPopoverContentSize(size: { width: number; height: number }, sender?:
 
 // Retained for the height-only bridge call; keeps the current width and lets the
 // new width+height path own the full adaptive sizing.
-function setPopoverContentHeight(height: number) {
-  setPopoverContentSize({ width: latestPopoverSize.width, height });
+function setPopoverContentHeight(height: number, sender: { id: number }) {
+  const width = popoverIpcSource(sender) === "pinned" ? PINNED_WIDGET_WIDTH : latestPopoverSize.width;
+  setPopoverContentSize({ width, height }, sender);
 }
 
 export async function startBabyMenuApp(): Promise<void> {
@@ -342,9 +352,10 @@ export async function startBabyMenuApp(): Promise<void> {
       setContentHeight: setPopoverContentHeight,
       setContentSize: setPopoverContentSize,
       // A pinned widget is always on screen, so its view refresh never pauses.
-      getVisibility: (sender) => ({
-        visible: pinnedWidgets?.owns(sender?.id) || (popoverWindow?.isVisible() ?? false),
-      }),
+      getVisibility: (sender) => {
+        const source = popoverIpcSource(sender);
+        return { visible: source === "pinned" || (source === "popover" && (popoverWindow?.isVisible() ?? false)) };
+      },
     },
     settingsController,
     {
@@ -377,6 +388,7 @@ export async function startBabyMenuApp(): Promise<void> {
   pinnedWidgets = createPinnedWidgetWindows({
     store: createPinnedWidgetStore(join(paths.appDataRoot, "pinned-widgets.json")),
     createWindow: createPinnedWindow,
+    loadWindow: loadPinnedWindow,
     getWorkArea: (point) =>
       (point ? screen.getDisplayNearestPoint(point) : screen.getPrimaryDisplay()).workArea,
   });
