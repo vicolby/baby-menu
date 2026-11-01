@@ -7,16 +7,16 @@ import {
   loadExtensionModules,
   type RuntimeModuleImporter,
 } from "../extension-modules";
-import { PinWidgetButton } from "./PinWidgetButton";
+import { PinModeOverlay } from "./pin-mode";
 import { useViewRefresh } from "./useViewRefresh";
 
 export type RuntimeWidgetImporter = RuntimeModuleImporter;
 
 const DEFAULT_RUNTIME_REFRESH_INTERVAL_MS = 1000;
 
-// `actions` is host chrome (e.g. the pin button) floated over the card's corner;
-// the extension still owns the card's content.
-export function WidgetCard({ widget, actions }: { widget: RefreshableBabyMenuWidget; actions?: ReactNode }) {
+// `overlay` is host chrome laid over the whole card (the pin mode target); the
+// extension still owns the card's content.
+export function WidgetCard({ widget, overlay }: { widget: RefreshableBabyMenuWidget; overlay?: ReactNode }) {
   // Drives automatic refresh only: once each time the popover opens, plus the
   // optional interval while visible. There is no manual refresh control.
   useViewRefresh({
@@ -29,7 +29,7 @@ export function WidgetCard({ widget, actions }: { widget: RefreshableBabyMenuWid
   return (
     <article className="widget">
       {widget.render()}
-      {actions ? <div className="widget-actions">{actions}</div> : null}
+      {overlay}
     </article>
   );
 }
@@ -37,8 +37,8 @@ export function WidgetCard({ widget, actions }: { widget: RefreshableBabyMenuWid
 // The built-in getting-started card is an empty-state fallback, not an installed
 // extension, so a pinned window could never find it again: it is not pinnable.
 function PopoverWidgetCard({ widget }: { widget: RefreshableBabyMenuWidget }) {
-  const actions = widget === helloWorldWidget ? undefined : <PinWidgetButton widgetId={widget.id} title={widget.title} />;
-  return <WidgetCard widget={widget} actions={actions} />;
+  const overlay = <PinModeOverlay widgetId={widget.id} title={widget.title} pinnable={widget !== helloWorldWidget} />;
+  return <WidgetCard widget={widget} overlay={overlay} />;
 }
 
 // The built-in layout: the historical stacked column, used whenever the

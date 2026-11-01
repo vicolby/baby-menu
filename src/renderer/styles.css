@@ -174,25 +174,50 @@ button:disabled,
   border-bottom: 0;
 }
 
-/* Host chrome floated over a widget card's corner (e.g. the pin button). Hidden
-   until the card is hovered or holds focus so it never competes with the content. */
+/* Pin mode lays a target over the whole card. Outside pin mode nothing is drawn
+   over a widget, so its own controls are never covered. */
 .widget {
   position: relative;
 }
 
-.widget > .widget-actions {
+.pin-mode-overlay {
   position: absolute;
-  top: 4px;
-  right: 0;
-  flex-direction: row;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--dur-fast, 120ms) ease;
+  inset: 4px -4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-stage) 88%, transparent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-tight);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast, 120ms) ease,
+    background-color var(--dur-fast, 120ms) ease;
 }
 
-.widget:hover > .widget-actions,
-.widget:focus-within > .widget-actions {
-  opacity: 1;
+.pin-mode-overlay:hover:not(:disabled),
+.pin-mode-overlay:focus-visible {
+  border-style: solid;
+  border-color: var(--color-ink-faint);
+  background: color-mix(in srgb, var(--color-elevated) 92%, transparent);
+  outline: none;
+}
+
+.pin-mode-overlay:disabled {
+  cursor: default;
+}
+
+.pin-mode-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-signal-live);
+  box-shadow: 0 0 6px var(--color-signal-live);
 }
 
 /* Pinned desktop widget windows are transparent: only the rounded card draws. */

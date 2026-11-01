@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RefreshableBabyMenuWidget } from "../src/shared/contracts";
 import { PINNED_WIDGET_WIDTH } from "../src/shared/pinned-widget";
 import { PinnedApp, readPinnedWidgetId } from "../src/renderer/PinnedApp";
-import { WidgetHost } from "../src/renderer/menu/WidgetHost";
 
 function widget(id: string, overrides: Partial<RefreshableBabyMenuWidget> = {}): RefreshableBabyMenuWidget {
   return { id, title: `${id} title`, render: () => <p>{`body of ${id}`}</p>, ...overrides } as RefreshableBabyMenuWidget;
@@ -125,50 +124,5 @@ describe("PinnedApp", () => {
     render(<PinnedApp widgetId="clock" widgets={[widget("clock", { refreshView })]} />);
 
     return waitFor(() => expect(refreshView).toHaveBeenCalled());
-  });
-});
-
-describe("pin button in the popover", () => {
-  it("pins a widget to the desktop and flips to unpin", async () => {
-    const { pinned } = installBridge();
-    const { findByLabelText } = render(<WidgetHost widgets={[widget("clock")]} layout={null} />);
-
-    fireEvent.click(await findByLabelText("pin clock title to desktop"));
-
-    await waitFor(() => expect(pinned.pin).toHaveBeenCalledWith("clock"));
-    fireEvent.click(await findByLabelText("unpin clock title from desktop"));
-    await waitFor(() => expect(pinned.unpin).toHaveBeenCalledWith("clock"));
-  });
-
-  it("shows an already pinned widget as pinned", async () => {
-    installBridge(["clock"]);
-
-    const { findByLabelText, queryByLabelText } = render(<WidgetHost widgets={[widget("clock"), widget("weather")]} layout={null} />);
-
-    expect(await findByLabelText("unpin clock title from desktop")).not.toBeNull();
-    expect(queryByLabelText("unpin weather title from desktop")).toBeNull();
-    expect(await findByLabelText("pin weather title to desktop")).not.toBeNull();
-  });
-
-  it("offers no pin button when the host has no pinning support", () => {
-    window.babyMenu = {
-      popover: { onVisibility: vi.fn(() => () => undefined) },
-    } as unknown as typeof window.babyMenu;
-
-    const { queryByLabelText } = render(<WidgetHost widgets={[widget("clock")]} layout={null} />);
-
-    expect(queryByLabelText("pin clock title to desktop")).toBeNull();
-  });
-
-  it("does not offer to pin the built-in getting-started card", async () => {
-    installBridge();
-    const list = vi.fn(async () => []);
-    window.babyMenu = { ...window.babyMenu, widgets: { list } } as unknown as typeof window.babyMenu;
-
-    const { queryByLabelText } = render(<WidgetHost layout={null} runtimeRefreshIntervalMs={0} />);
-
-    await waitFor(() => expect(list).toHaveBeenCalled());
-    await act(async () => undefined);
-    expect(queryByLabelText(/to desktop/)).toBeNull();
   });
 });

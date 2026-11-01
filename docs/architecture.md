@@ -35,7 +35,8 @@ Widgets conform to `BabyMenuWidget` / `RefreshableBabyMenuWidget`; `WidgetHost` 
 A root `layout.tsx` default-exports a `BabyMenuLayout`, receives active widget metadata plus `renderWidget(id)`, and owns the canvas arrangement; the popover adapts to the canvas width plus chrome and the rendered height.
 If the popover renderer process dies, `app.ts` reloads it on `render-process-gone` (deferred out of the event, capped by `createRendererReloadBudget` in `src/main/popover.ts`), and the next tray click reloads a renderer the cap gave up on, so the popover never stays a blank window.
 **Pinned desktop widgets.**
-The pin button on a popover widget card pins it into its own always-visible window (`src/main/pinned-widgets.ts`); the same renderer bundle loads with `?pinned=<widget id>` and `PinnedApp` renders just that widget.
+The pin toggle in the popover header starts pin mode (`src/renderer/menu/pin-mode.tsx`): every widget card is covered by a pin target until Escape, the toggle, or closing the popover ends it, and outside pin mode the host draws nothing over widget cards.
+Pinning opens the widget in its own always-visible window (`src/main/pinned-widgets.ts`); the same renderer bundle loads with `?pinned=<widget id>` and `PinnedApp` renders just that widget.
 Which widgets are pinned and where is persisted in `~/.baby-menu/pinned-widgets.json` and restored on launch.
 The window uses `setAlwaysOnTop(true, "normal", -1000)`, so it sits above desktop icons and below every normal window; `type: "desktop"` was measured to land under the Finder icon layer and never receives mouse events, so it is not used.
 Pinned renderers are always treated as visible (view refresh never pauses) and receive background-task updates; they size their own window through the generic `popover.setContentSize`/`setContentHeight` routes, which main resolves by sender.

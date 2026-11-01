@@ -3,6 +3,7 @@ import { Power, RotateCw, Settings, X } from "lucide-react";
 import { Button, Tooltip } from "../ui";
 import { AgentChat } from "./agent/AgentChat";
 import { MenuSurface } from "./menu/MenuSurface";
+import { PinModeProvider, PinModeToggle } from "./menu/pin-mode";
 import { SettingsView } from "./settings/SettingsView";
 import { usePopoverContentSize } from "./use-popover-content-size";
 import { UpdateIndicator } from "./UpdateIndicator";
@@ -43,44 +44,53 @@ export function App() {
           inert while covered so focus and pointer events cannot reach behind the
           overlay. */}
       <div className="app-view" inert={settingsOpen}>
-        <header className="pop-head">
-          <span className="mark">
-            baby<span className="sep">_</span>menu
-          </span>
-          <div className="flex items-center gap-1">
-            <UpdateIndicator />
-            <Tooltip content="Reload layout">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-7 px-0"
-                aria-label="reload layout"
-                onClick={reloadLayout}
-              >
-                <RotateCw className="size-4" />
-              </Button>
-            </Tooltip>
-            <Tooltip content="Open settings">
-              <Button variant="ghost" size="sm" className="w-7 px-0" aria-label="open settings" onClick={openSettings}>
-                <Settings className="size-4" />
-              </Button>
-            </Tooltip>
-            <Tooltip content="Quit baby menu">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-7 px-0 hover:text-signal-danger"
-                aria-label="quit baby_menu"
-                onClick={quitApp}
-              >
-                <Power className="size-4" />
-              </Button>
-            </Tooltip>
+        <PinModeProvider>
+          <header className="pop-head">
+            <span className="mark">
+              baby<span className="sep">_</span>menu
+            </span>
+            <div className="flex items-center gap-1">
+              <UpdateIndicator />
+              <PinModeToggle />
+              <Tooltip content="Reload layout">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-7 px-0"
+                  aria-label="reload layout"
+                  onClick={reloadLayout}
+                >
+                  <RotateCw className="size-4" />
+                </Button>
+              </Tooltip>
+              <Tooltip content="Open settings">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-7 px-0"
+                  aria-label="open settings"
+                  onClick={openSettings}
+                >
+                  <Settings className="size-4" />
+                </Button>
+              </Tooltip>
+              <Tooltip content="Quit baby menu">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-7 px-0 hover:text-signal-danger"
+                  aria-label="quit baby_menu"
+                  onClick={quitApp}
+                >
+                  <Power className="size-4" />
+                </Button>
+              </Tooltip>
+            </div>
+          </header>
+          <div className="pop-body">
+            <MenuSurface key={reloadNonce} />
           </div>
-        </header>
-        <div className="pop-body">
-          <MenuSurface key={reloadNonce} />
-        </div>
+        </PinModeProvider>
         <AgentChat />
       </div>
 
