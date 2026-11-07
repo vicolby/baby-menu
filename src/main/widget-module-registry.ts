@@ -242,8 +242,9 @@ async function compiledWidgetModuleUrls({
   return { moduleUrl, cssUrl };
 }
 
-// Compiles the widget's Tailwind utilities once per content hash (the JS compile
-// already keys the output dir by source hash), so polling list() is cheap.
+// Writes the widget stylesheet once for a content-addressed output dir. The JS
+// compile already keys that dir by source hash, and a theme cache key skips a
+// rewrite when the stylesheet is already current.
 async function ensureWidgetCss({ extensionDir, outputDir }: { extensionDir: string; outputDir: string }): Promise<string> {
   const cssPath = join(outputDir, WIDGET_CSS_FILENAME);
   const cacheKeyPath = join(outputDir, WIDGET_CSS_CACHE_KEY_FILENAME);
