@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.25](https://github.com/vicolby/baby-menu/compare/baby-menu-v0.1.24...baby-menu-v0.1.25) (2026-11-07)
+
+
+### Features
+
+* release through the vicolby Homebrew tap with ad-hoc signing ([3a2fd3d](https://github.com/vicolby/baby-menu/commit/3a2fd3d87752c607505abfa5fbc547a28b85a361))
+* **widgets:** pin widgets to the desktop as always-visible windows ([e6a1a3a](https://github.com/vicolby/baby-menu/commit/e6a1a3ad3ba3aae7d969d4b6e559a5c01746189a))
+
+
+### Bug Fixes
+
+* **popover:** recover the popover when its renderer process dies ([#118](https://github.com/vicolby/baby-menu/issues/118)) ([e7804b1](https://github.com/vicolby/baby-menu/commit/e7804b165af25e407a6635c30358a2e41cfe72cd))
+* **widgets:** keep pinned windows from resizing the popover and serialize pin races ([7a395be](https://github.com/vicolby/baby-menu/commit/7a395be3cc72ad248e809c5b041f3134877fffca))
+* **widgets:** move pinning into a header pin mode so it never covers widget controls ([6200aae](https://github.com/vicolby/baby-menu/commit/6200aae4c8587247333ec4093b661a13600be2c6))
+
 ## [0.1.24](https://github.com/kunchenguid/baby-menu/compare/baby-menu-v0.1.23...baby-menu-v0.1.24) (2026-07-25)
 
 
