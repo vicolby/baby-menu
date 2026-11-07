@@ -33,7 +33,7 @@ import { getDefaultTelemetry, initDefaultTelemetry } from "./telemetry";
 import { expandProcessPathForGuiLaunch } from "./shell-path";
 import { createUpdateChecker } from "./update-checker";
 import { createBabyMenuTray, type BabyMenuTray } from "./tray";
-import { createLayoutModuleRegistry, createWidgetModuleRegistry } from "./widget-module-registry";
+import { createExtensionModuleCatalog } from "./extension-module-catalog";
 import { registerBabyMenuProtocolHandlers, registerBabyMenuProtocolSchemes } from "./widget-protocol";
 
 if (process.platform === "darwin") {
@@ -326,14 +326,19 @@ export async function startBabyMenuApp(): Promise<void> {
     db: database,
     notify,
   });
-  const widgetRegistryOptions = {
+  const extensionModules = createExtensionModuleCatalog({
     rootDir: paths.appDataRoot,
     extensionsDir: paths.extensionsDir,
     mode: (paths.isPackaged ? "compiled" : "vite") as "compiled" | "vite",
     widgetCacheDir: paths.widgetCacheDir,
-  };
-  const widgetModules = createWidgetModuleRegistry(widgetRegistryOptions);
-  const layoutModules = createLayoutModuleRegistry(widgetRegistryOptions);
+  });
+  // One signal for every renderer. Pinned windows are always on screen; the
+  // popover window stays alive while hidden, so both hear file changes without polling.
+  extensionModules.onChanged(() => {
+    sendToPopover("baby-menu:widgets:modules-changed", {});
+    pinnedWidgets?.broadcast("baby-menu:widgets:modules-changed", {});
+  });
+  extensionModules.start();
 
   const updateChecker = createUpdateChecker({
     currentVersion: app.getVersion(),
@@ -347,7 +352,7 @@ export async function startBabyMenuApp(): Promise<void> {
     paths.appDataRoot,
     agentRuntime,
     serverActions,
-    widgetModules,
+    extensionModules,
     {
       setContentHeight: setPopoverContentHeight,
       setContentSize: setPopoverContentSize,
@@ -366,7 +371,7 @@ export async function startBabyMenuApp(): Promise<void> {
     {
       recipesDir: paths.recipesDir,
       database,
-      layoutModules,
+      layoutModules: extensionModules,
       pinnedWidgets: {
         list: () => pinnedWidgets?.list() ?? [],
         pin: async (id) => {
@@ -420,6 +425,7 @@ export async function startBabyMenuApp(): Promise<void> {
   app.on("activate", () => undefined);
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", () => {
+    extensionModules.stop();
     backgroundTasks.stop();
     database.close();
     void telemetry.close(1_000);

@@ -275,6 +275,9 @@ export type BabyMenuApi = {
   };
   widgets: {
     list: () => Promise<BabyMenuWidgetModuleDescriptor[]>;
+    // Host-only. Fires when widget or layout files change on disk so open
+    // renderers can reload discovery. Not part of BabyMenuExtensionApi.
+    onModulesChanged?: (listener: () => void) => () => void;
   };
   // Host-only: the agent-authored root layout module, or null when the workspace
   // has no `layout.tsx` (the renderer then uses the built-in column). Not part of

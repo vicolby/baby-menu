@@ -12,8 +12,6 @@ import { useViewRefresh } from "./useViewRefresh";
 
 export type RuntimeWidgetImporter = RuntimeModuleImporter;
 
-const DEFAULT_RUNTIME_REFRESH_INTERVAL_MS = 1000;
-
 // `overlay` is host chrome laid over the whole card (the pin mode target); the
 // extension still owns the card's content.
 export function WidgetCard({ widget, overlay }: { widget: RefreshableBabyMenuWidget; overlay?: ReactNode }) {
@@ -105,25 +103,22 @@ function WidgetCanvas({ layout, widgets }: { layout: BabyMenuLayout | null; widg
 type WidgetHostProps = {
   widgets?: RefreshableBabyMenuWidget[];
   runtimeImporter?: RuntimeWidgetImporter;
-  runtimeRefreshIntervalMs?: number;
   // Test/override hook: a custom layout component (or null for the built-in
   // column), bypassing runtime discovery. Undefined means discover at runtime.
   layout?: BabyMenuLayout | null;
   layoutImporter?: RuntimeModuleImporter;
 };
 
-export function WidgetHost({ widgets, runtimeImporter, runtimeRefreshIntervalMs, layout, layoutImporter }: WidgetHostProps) {
+export function WidgetHost({ widgets, runtimeImporter, layout, layoutImporter }: WidgetHostProps) {
   const runtimeWidgets = useRuntimeWidgets({
     enabled: widgets === undefined,
     importer: runtimeImporter,
-    refreshIntervalMs: runtimeRefreshIntervalMs,
   });
   const visibleWidgets = widgets ?? (runtimeWidgets.length > 0 ? runtimeWidgets : [helloWorldWidget]);
 
   const runtimeLayout = useRuntimeLayout({
     enabled: widgets === undefined && layout === undefined,
     importer: layoutImporter,
-    refreshIntervalMs: runtimeRefreshIntervalMs,
   });
   const activeLayout = layout === undefined ? runtimeLayout : layout;
 
@@ -135,11 +130,9 @@ export function WidgetHost({ widgets, runtimeImporter, runtimeRefreshIntervalMs,
 export function useRuntimeWidgetList({
   enabled,
   importer = importRuntimeModule,
-  refreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
 }: {
   enabled: boolean;
   importer?: RuntimeWidgetImporter;
-  refreshIntervalMs?: number;
 }) {
   const [state, setState] = useState<{ widgets: RefreshableBabyMenuWidget[]; loaded: boolean }>({
     widgets: [],
@@ -149,25 +142,23 @@ export function useRuntimeWidgetList({
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
+    let version = 0;
 
     async function refresh() {
+      const current = ++version;
       const loadedWidgets = await loadRuntimeWidgets(importer);
-      if (!cancelled) setState({ widgets: loadedWidgets, loaded: true });
+      if (!cancelled && current === version) setState({ widgets: loadedWidgets, loaded: true });
     }
 
     void refresh();
-    if (!refreshIntervalMs || refreshIntervalMs <= 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const timer = window.setInterval(() => void refresh(), refreshIntervalMs);
+    const unsubscribe = subscribeToRuntimeReload(() => {
+      void refresh();
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      unsubscribe();
     };
-  }, [enabled, importer, refreshIntervalMs]);
+  }, [enabled, importer]);
 
   return state;
 }
@@ -176,43 +167,52 @@ function useRuntimeWidgets(options: Parameters<typeof useRuntimeWidgetList>[0]) 
   return useRuntimeWidgetList(options).widgets;
 }
 
-// Polls for the root layout module on the same cadence as widget discovery, so
-// editing `layout.tsx` hot-reloads the arrangement. Returns null when there is
-// no layout module (the canvas then renders the built-in column).
+// Reloads widget and layout discovery when main reports a real file change, and
+// again when the popover opens. Pinned windows share the file-change event.
+// There is no timer: a repeat list with nothing new on disk must not transpile.
+function subscribeToRuntimeReload(refresh: () => void): () => void {
+  const unsubscribeModules = window.babyMenu?.widgets.onModulesChanged?.(refresh);
+  const unsubscribeVisibility = window.babyMenu?.popover.onVisibility?.(({ visible }) => {
+    if (visible) refresh();
+  });
+  return () => {
+    unsubscribeModules?.();
+    unsubscribeVisibility?.();
+  };
+}
+
+// Loads the root layout module alongside widget discovery. Returns null when
+// there is no layout module (the canvas then renders the built-in column).
 function useRuntimeLayout({
   enabled,
   importer = importRuntimeModule,
-  refreshIntervalMs = DEFAULT_RUNTIME_REFRESH_INTERVAL_MS,
 }: {
   enabled: boolean;
   importer?: RuntimeModuleImporter;
-  refreshIntervalMs?: number;
 }) {
   const [layout, setLayout] = useState<BabyMenuLayout | null>(null);
 
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
+    let version = 0;
 
     async function refresh() {
+      const current = ++version;
       const loaded = await loadRuntimeLayout(importer);
       // setState updater form because the stored value is itself a function.
-      if (!cancelled) setLayout(() => loaded);
+      if (!cancelled && current === version) setLayout(() => loaded);
     }
 
     void refresh();
-    if (!refreshIntervalMs || refreshIntervalMs <= 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const timer = window.setInterval(() => void refresh(), refreshIntervalMs);
+    const unsubscribe = subscribeToRuntimeReload(() => {
+      void refresh();
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      unsubscribe();
     };
-  }, [enabled, importer, refreshIntervalMs]);
+  }, [enabled, importer]);
 
   return layout;
 }

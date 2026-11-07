@@ -30,6 +30,15 @@ describe("preload capabilities bridge", () => {
     await api.widgets.list();
     expect(invoke).toHaveBeenCalledWith("baby-menu:widgets:list");
 
+    const onModulesChanged = vi.fn();
+    const unsubscribeModules = api.widgets.onModulesChanged(onModulesChanged);
+    const modulesHandler = on.mock.calls.find(([channel]) => channel === "baby-menu:widgets:modules-changed")?.[1];
+    modulesHandler?.({}, {});
+    expect(on).toHaveBeenCalledWith("baby-menu:widgets:modules-changed", expect.any(Function));
+    expect(onModulesChanged).toHaveBeenCalledWith({});
+    unsubscribeModules();
+    expect(removeListener).toHaveBeenCalledWith("baby-menu:widgets:modules-changed", modulesHandler);
+
     await api.db.query("SELECT 1", [1]);
     expect(invoke).toHaveBeenCalledWith("baby-menu:db:query", "SELECT 1", [1]);
 

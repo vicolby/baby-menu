@@ -33,6 +33,7 @@ function installBridge(pinnedIds: string[] = []) {
 afterEach(() => {
   cleanup();
   delete window.babyMenu;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -131,6 +132,42 @@ describe("PinnedApp", () => {
     render(<PinnedApp widgetId="clock" widgets={[widget("clock")]} />);
 
     await waitFor(() => expect(popover.setContentSize).toHaveBeenCalledWith({ width: PINNED_WIDGET_WIDTH, height: 187 }));
+  });
+
+  it("reloads a pinned widget when extension modules change, not on a timer", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval"] });
+    const list = vi.fn(async () => [{ id: "clock.widget", extensionId: "clock", moduleUrl: "/clock.js" }]);
+    let notify: (() => void) | undefined;
+    installBridge(["clock"]);
+    window.babyMenu = {
+      ...window.babyMenu,
+      widgets: {
+        list,
+        onModulesChanged: (listener: () => void) => {
+          notify = listener;
+          return () => {
+            notify = undefined;
+          };
+        },
+      },
+    } as unknown as typeof window.babyMenu;
+
+    const { findByText } = render(
+      <PinnedApp widgetId="clock" runtimeImporter={async () => ({ clock: widget("clock") })} />,
+    );
+
+    expect(await findByText("body of clock")).not.toBeNull();
+    expect(list).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      notify?.();
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
   });
 
   it("refreshes the pinned widget even though the popover is closed", () => {

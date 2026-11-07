@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WidgetHost } from "../src/renderer/menu/WidgetHost";
 import type { BabyMenuApi, RefreshableBabyMenuWidget } from "../src/shared/contracts";
@@ -61,6 +61,7 @@ function installBabyMenuApi(widgets: BabyMenuApi["widgets"]) {
 afterEach(() => {
   cleanup();
   delete window.babyMenu;
+  vi.useRealTimers();
 });
 
 describe("WidgetHost", () => {
@@ -76,7 +77,7 @@ describe("WidgetHost", () => {
       ]),
     });
 
-    render(<WidgetHost runtimeImporter={async () => ({ cpuWidget })} runtimeRefreshIntervalMs={0} />);
+    render(<WidgetHost runtimeImporter={async () => ({ cpuWidget })} />);
 
     expect(await screen.findByText("42c")).toBeTruthy();
     expect(screen.queryByText("hello world")).toBeNull();
@@ -85,8 +86,68 @@ describe("WidgetHost", () => {
   it("shows hello-world when no runtime widgets are discovered", async () => {
     installBabyMenuApi({ list: vi.fn(async () => []) });
 
-    render(<WidgetHost runtimeImporter={async () => ({})} runtimeRefreshIntervalMs={0} />);
+    render(<WidgetHost runtimeImporter={async () => ({})} />);
 
     expect(await screen.findByText("hello world")).toBeTruthy();
+  });
+
+  it("reloads widgets and layout when modules change or the popover opens, not on a timer", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval"] });
+    const cpuWidget: RefreshableBabyMenuWidget = {
+      id: "cpu-temp",
+      title: "CPU TEMP",
+      render: () => <span>42c</span>,
+    };
+    const list = vi.fn(async () => [
+      { id: "cpu-temp.widget", extensionId: "cpu-temp", moduleUrl: "/@fs/cpu-temp/widget.tsx" },
+    ]);
+    const moduleListeners = new Set<() => void>();
+    const visibilityListeners = new Set<(state: { visible: boolean }) => void>();
+    installBabyMenuApi({
+      list,
+      onModulesChanged: (listener) => {
+        moduleListeners.add(listener);
+        return () => {
+          moduleListeners.delete(listener);
+        };
+      },
+    });
+    const getLayout = vi.mocked(window.babyMenu!.layout.get);
+    window.babyMenu!.popover.onVisibility = (listener) => {
+      visibilityListeners.add(listener);
+      return () => {
+        visibilityListeners.delete(listener);
+      };
+    };
+
+    render(<WidgetHost runtimeImporter={async () => ({ cpuWidget })} />);
+
+    expect(await screen.findByText("42c")).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(getLayout).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(getLayout).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      for (const listener of moduleListeners) listener();
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(getLayout).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      for (const listener of visibilityListeners) listener({ visible: false });
+    });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(getLayout).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      for (const listener of visibilityListeners) listener({ visible: true });
+    });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    expect(getLayout).toHaveBeenCalledTimes(3);
   });
 });

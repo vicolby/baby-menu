@@ -103,6 +103,16 @@ vi.mock("../src/main/widget-module-registry", () => ({
   createWidgetModuleRegistry: vi.fn(() => ({})),
   createLayoutModuleRegistry: vi.fn(() => ({ get: vi.fn(async () => null) })),
 }));
+vi.mock("../src/main/extension-module-catalog", () => ({
+  createExtensionModuleCatalog: vi.fn(() => ({
+    list: vi.fn(async () => []),
+    get: vi.fn(async () => null),
+    start: vi.fn(),
+    stop: vi.fn(),
+    onChanged: vi.fn(() => () => undefined),
+  })),
+  EXTENSION_MODULE_STAT_INTERVAL_MS: 45_000,
+}));
 vi.mock("../src/main/widget-protocol", () => ({
   registerBabyMenuProtocolHandlers: vi.fn(),
   registerBabyMenuProtocolSchemes: vi.fn(),

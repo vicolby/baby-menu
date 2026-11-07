@@ -54,6 +54,7 @@ const api: BabyMenuApi = {
   },
   widgets: {
     list: () => ipcRenderer.invoke("baby-menu:widgets:list"),
+    onModulesChanged: createEventChannel<void>("baby-menu:widgets:modules-changed"),
   },
   layout: {
     get: () => ipcRenderer.invoke("baby-menu:layout:get"),

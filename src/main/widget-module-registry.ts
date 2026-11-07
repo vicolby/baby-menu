@@ -3,7 +3,7 @@ import { access, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BabyMenuLayoutModuleDescriptor, BabyMenuWidgetModuleDescriptor } from "../shared/contracts";
 import { getExtensionsDir } from "../shared/paths";
-import { compileExtensionModule } from "./extension-module-compiler";
+import { compileExtensionModule, type CompileExtensionModuleOptions } from "./extension-module-compiler";
 import { compileWidgetTailwindCss, widgetTailwindCssCacheKey } from "./widget-tailwind-css";
 // The single @theme source, inlined into the main bundle so it ships with the
 // packaged app. electron-vite (dev + build) resolves `?raw` to the file text;
@@ -23,6 +23,8 @@ export type DiscoverWidgetModulesOptions = {
   extensionsDir?: string;
   mode?: "vite" | "compiled";
   widgetCacheDir?: string;
+  // Overridable so a caller can prove a repeat discovery does not transpile.
+  compile?: (options: CompileExtensionModuleOptions) => ReturnType<typeof compileExtensionModule>;
 };
 
 const STARTER_EXTENSION_ID = "hello-world";
@@ -50,12 +52,13 @@ export async function discoverWidgetModules({
   extensionsDir = getExtensionsDir(rootDir),
   mode = "vite",
   widgetCacheDir,
+  compile,
 }: DiscoverWidgetModulesOptions): Promise<BabyMenuWidgetModuleDescriptor[]> {
   const files = await discoverWidgetFiles(resolve(extensionsDir));
   const modules = await Promise.all(
     files.map(async (filePath) => {
       try {
-        return await widgetModuleDescriptor({ rootDir, extensionsDir, mode, widgetCacheDir }, filePath);
+        return await widgetModuleDescriptor({ rootDir, extensionsDir, mode, widgetCacheDir, compile }, filePath);
       } catch (error) {
         if (mode !== "compiled") throw error;
         return null;
@@ -87,6 +90,7 @@ export async function discoverLayoutModule({
   extensionsDir = getExtensionsDir(rootDir),
   mode = "vite",
   widgetCacheDir,
+  compile,
 }: DiscoverWidgetModulesOptions): Promise<BabyMenuLayoutModuleDescriptor | null> {
   const resolvedExtensionsDir = resolve(extensionsDir);
   const filePath = await findLayoutFile(resolvedExtensionsDir);
@@ -94,7 +98,12 @@ export async function discoverLayoutModule({
 
   try {
     if (mode === "compiled") {
-      return await compiledLayoutModuleUrls({ extensionsDir: resolvedExtensionsDir, filePath, widgetCacheDir });
+      return await compiledLayoutModuleUrls({
+        extensionsDir: resolvedExtensionsDir,
+        filePath,
+        widgetCacheDir,
+        compile,
+      });
     }
     const fileStat = await stat(filePath);
     return { moduleUrl: rendererModuleUrl(filePath, fileStat.mtimeMs) };
@@ -126,13 +135,15 @@ async function compiledLayoutModuleUrls({
   extensionsDir,
   filePath,
   widgetCacheDir,
+  compile = compileExtensionModule,
 }: {
   extensionsDir: string;
   filePath: string;
   widgetCacheDir?: string;
+  compile?: DiscoverWidgetModulesOptions["compile"];
 }): Promise<BabyMenuLayoutModuleDescriptor> {
   if (!widgetCacheDir) throw new Error("widgetCacheDir is required for compiled layout modules");
-  const compiled = await compileExtensionModule({
+  const compiled = await compile({
     kind: "layout",
     extensionId: LAYOUT_EXTENSION_ID,
     extensionDir: extensionsDir,
@@ -166,14 +177,24 @@ async function discoverWidgetFiles(rootDir: string): Promise<string[]> {
   return files.flat();
 }
 
-async function widgetModuleDescriptor(options: Required<Pick<DiscoverWidgetModulesOptions, "rootDir" | "extensionsDir" | "mode">> & Pick<DiscoverWidgetModulesOptions, "widgetCacheDir">, filePath: string): Promise<BabyMenuWidgetModuleDescriptor | null> {
+async function widgetModuleDescriptor(
+  options: Required<Pick<DiscoverWidgetModulesOptions, "rootDir" | "extensionsDir" | "mode">> &
+    Pick<DiscoverWidgetModulesOptions, "widgetCacheDir" | "compile">,
+  filePath: string,
+): Promise<BabyMenuWidgetModuleDescriptor | null> {
   const extensionId = inferExtensionId(options.extensionsDir, filePath);
   if (!extensionId || extensionId === STARTER_EXTENSION_ID) return null;
 
   const fileStat = await stat(filePath);
   const urls =
     options.mode === "compiled"
-      ? await compiledWidgetModuleUrls({ extensionsDir: options.extensionsDir, extensionId, filePath, widgetCacheDir: options.widgetCacheDir })
+      ? await compiledWidgetModuleUrls({
+          extensionsDir: options.extensionsDir,
+          extensionId,
+          filePath,
+          widgetCacheDir: options.widgetCacheDir,
+          compile: options.compile,
+        })
       : { moduleUrl: rendererModuleUrl(filePath, fileStat.mtimeMs) };
   return {
     id: `${extensionId}.widget`,
@@ -196,15 +217,17 @@ async function compiledWidgetModuleUrls({
   extensionId,
   filePath,
   widgetCacheDir,
+  compile = compileExtensionModule,
 }: {
   extensionsDir: string;
   extensionId: string;
   filePath: string;
   widgetCacheDir?: string;
+  compile?: DiscoverWidgetModulesOptions["compile"];
 }): Promise<{ moduleUrl: string; cssUrl: string }> {
   if (!widgetCacheDir) throw new Error("widgetCacheDir is required for compiled widget modules");
   const extensionDir = join(resolve(extensionsDir), extensionId);
-  const compiled = await compileExtensionModule({
+  const compiled = await compile({
     kind: "widget",
     extensionId,
     extensionDir,

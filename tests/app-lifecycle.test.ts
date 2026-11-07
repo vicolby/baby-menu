@@ -52,6 +52,19 @@ const protocol = {
   handle: vi.fn(),
 };
 const registerIpcHandlers = vi.fn();
+const extensionModuleListeners = new Set<() => void>();
+const extensionModuleCatalog = {
+  list: vi.fn(async () => []),
+  get: vi.fn(async () => null),
+  start: vi.fn(),
+  stop: vi.fn(),
+  onChanged: vi.fn((listener: () => void) => {
+    extensionModuleListeners.add(listener);
+    return () => {
+      extensionModuleListeners.delete(listener);
+    };
+  }),
+};
 const telemetryClient = {
   track: vi.fn(),
   pageview: vi.fn(),
@@ -113,6 +126,11 @@ vi.mock("../src/main/widget-module-registry", () => ({
   createLayoutModuleRegistry: vi.fn(() => ({ get: vi.fn(async () => null) })),
 }));
 
+vi.mock("../src/main/extension-module-catalog", () => ({
+  createExtensionModuleCatalog: vi.fn(() => extensionModuleCatalog),
+  EXTENSION_MODULE_STAT_INTERVAL_MS: 45_000,
+}));
+
 vi.mock("../src/main/widget-protocol", () => ({
   registerBabyMenuProtocolHandlers: vi.fn(),
   registerBabyMenuProtocolSchemes: vi.fn(),
@@ -137,6 +155,7 @@ describe("startBabyMenuApp", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    extensionModuleListeners.clear();
     electronApp.isPackaged = false;
     electronApp.getPath.mockImplementation((name: string) => {
       if (name === "home") return "/home/test-user";
@@ -568,6 +587,24 @@ describe("startBabyMenuApp", () => {
       await startWithPinnedWidget(pinned);
 
       expect(visibilityDuringLoad).toEqual({ visible: true });
+    });
+
+    it("tells the popover and pinned renderers when extension modules change", async () => {
+      const { pinned } = await startWithPinnedWidget();
+      expect(extensionModuleCatalog.start).toHaveBeenCalled();
+
+      browserWindowInstance.webContents.send.mockClear();
+      pinned.webContents.send.mockClear();
+      for (const listener of extensionModuleListeners) listener();
+
+      expect(browserWindowInstance.webContents.send).toHaveBeenCalledWith("baby-menu:widgets:modules-changed", {});
+      expect(pinned.webContents.send).toHaveBeenCalledWith("baby-menu:widgets:modules-changed", {});
+
+      const onBeforeQuit = electronApp.on.mock.calls.find(([event]) => event === "before-quit")?.[1] as
+        | (() => void)
+        | undefined;
+      onBeforeQuit?.();
+      expect(extensionModuleCatalog.stop).toHaveBeenCalled();
     });
   });
 });

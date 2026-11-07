@@ -151,7 +151,7 @@ describe("pin mode", () => {
     render(
       <PinModeProvider>
         <PinModeToggle />
-        <WidgetHost runtimeImporter={async () => ({})} runtimeRefreshIntervalMs={0} layout={null} />
+        <WidgetHost runtimeImporter={async () => ({})} layout={null} />
       </PinModeProvider>,
     );
     await screen.findByText("hello world");

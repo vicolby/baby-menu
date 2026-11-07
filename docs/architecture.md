@@ -30,6 +30,9 @@ Provider-specific acquisition and refresh contracts live in the matching recipe.
 `refreshView` / `viewRefreshIntervalMs` keeps a visible widget current and pauses while the popover is hidden.
 `export const background` in `server.ts` runs on a host-owned timer (60-second minimum) for work that must continue while the popover is closed.
 
+**Module discovery.**
+The main process caches widget and layout descriptors. A debounced `fs.watch` on the extensions directory, plus a mtime/size walk about once a minute that does not transpile, invalidates that cache when files change. Open renderers, including pinned windows, reload discovery on that shared signal and when the popover opens.
+
 **Extension contracts.**
 Widgets conform to `BabyMenuWidget` / `RefreshableBabyMenuWidget`; `WidgetHost` owns visible-widget refresh timing via `useViewRefresh` and the main-process popover visibility signal, so widgets never start their own polling.
 A root `layout.tsx` default-exports a `BabyMenuLayout`, receives active widget metadata plus `renderWidget(id)`, and owns the canvas arrangement; the popover adapts to the canvas width plus chrome and the rendered height.
@@ -147,7 +150,7 @@ Public extension surfaces are deliberate, tested contracts:
 | `src/main/extension-seeder.ts` | Force-copies shipped defaults (`AGENTS.md`, `babymenu-env.d.ts`, `recipes/`, managed extensions) into the packaged workspace on every launch, never deleting user extensions. Edits to managed defaults in `~/.baby-menu/extensions` do not persist; change `extensions/` instead. |
 | `src/main/extension-module-compiler.ts` | Compiles packaged widget, layout, and server modules; rewrites `react` and `@babymenu/ui` to host protocol modules, rejects other external imports (server modules may also use Node builtins), repairs stale content-addressed cache outputs |
 | `src/main/widget-tailwind-css.ts` | Compiles widget and layout Tailwind utilities against `src/ui/theme.css` for packaged loading |
-| `src/main/widget-module-registry.ts`, `widget-protocol.ts` | Discovers widgets and root `layout.tsx` (Vite `/@fs` URLs in dev, compiled `baby-menu-widget://` modules plus `cssUrl` when packaged); serves compiled modules and host shims |
+| `src/main/widget-module-registry.ts`, `extension-module-catalog.ts`, `widget-protocol.ts` | Discovers widgets and root `layout.tsx` (Vite `/@fs` URLs in dev, compiled `baby-menu-widget://` modules plus `cssUrl` when packaged) and caches them until extension files change; serves compiled modules and host shims |
 | `src/main/server-action-registry.ts`, `background-task-scheduler.ts` | Discovers and caches server actions and background tasks; host-owned timers with a 60-second minimum |
 | `src/main/extension-database.ts`, `notifier.ts` | Shared SQLite store; native notifications for `context.notify` |
 | `src/main/preferences.ts` | App preferences; login-item settings only for the packaged production product named `Baby Menu` |
