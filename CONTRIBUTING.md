@@ -57,10 +57,11 @@ Repository configuration:
 - Secret `HOMEBREW_TAP_TOKEN` - a fine-grained token with Contents read and write access to `vicolby/homebrew-tap`, used for the final cask update.
 - Optional variables `BABY_MENU_UMAMI_HOST` and `BABY_MENU_UMAMI_WEBSITE_ID` - enable packaged-release telemetry only when both are set. They are variables rather than secrets because both are baked into the app.
 - Settings > Actions > General must allow workflows read and write permissions and allow GitHub Actions to create pull requests, so release-please can open its release PR.
+- Rulesets on `main`: "Protect main" blocks force pushes and deletion for everyone; "Require no-mistakes for pull requests" requires a PR with a passing `PR must be raised via no-mistakes` check, and only the repository admin can bypass it to push directly.
 
 Never commit or print credential contents. Pull-request CI remains secret-free and validates the release config through `tests/release-config.test.ts`.
 
-To release, merge the release-please PR and require the `release-please` workflow's macOS job to pass. The release remains a draft until the artifact passes verification and runtime E2E, receives a valid checksum, and uploads successfully. If the macOS job fails, fix the cause and re-run the failed job; do not upload a replacement DMG or update the tap by hand.
+To release, merge the release-please PR (it has no checks, because PRs opened with `GITHUB_TOKEN` trigger no workflows, so the admin merges it with the ruleset bypass) and require the `release-please` workflow's macOS job to pass. The release remains a draft until the artifact passes verification and runtime E2E, receives a valid checksum, and uploads successfully. If the macOS job fails, fix the cause and re-run the failed job; do not upload a replacement DMG or update the tap by hand.
 For a post-release check of exactly the downloaded artifact on macOS:
 
 ```sh

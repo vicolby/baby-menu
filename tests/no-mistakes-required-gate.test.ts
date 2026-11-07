@@ -73,7 +73,7 @@ describe("no-mistakes-required workflow contract", () => {
     );
   });
 
-  it("delegates the only job step to the immutable shared action, with kunchenguid exempted via exempt-authors", async () => {
+  it("delegates the only job step to the immutable shared action without exempting any human author", async () => {
     const config = await workflow();
     const steps = config.jobs.check.steps;
 
@@ -81,9 +81,6 @@ describe("no-mistakes-required workflow contract", () => {
     expect(steps[0]).toEqual({
       name: "Verify no-mistakes signature and pipeline attestation in PR body",
       uses: ACTION,
-      with: {
-        "exempt-authors": "kunchenguid\n",
-      },
     });
     expect(steps[0].run).toBeUndefined();
   });
