@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { compileExtensionModule } from "../src/main/extension-module-compiler";
 import {
@@ -23,7 +23,11 @@ vi.mock("electron", () => ({
   },
 }));
 
-const WIDGET_SOURCE = `export const cpuTempWidget = { id: "cpu-temp", title: "CPU", render: () => "version-one" };\n`;
+function widgetSource(label: string): string {
+  return `export const cpuTempWidget = { id: "cpu-temp", title: "CPU", render: () => "${label}" };\n`;
+}
+
+const WIDGET_SOURCE = widgetSource("version-one");
 const WIDGET_SOURCE_EDITED = `export const cpuTempWidget = { id: "cpu-temp", title: "CPU", render: () => "version-two" };\n`;
 const LAYOUT_SOURCE = `export default function Layout() { return null; }\n`;
 
@@ -142,6 +146,48 @@ describe("extension module catalog", () => {
     const compiled = await readFile(cachePath(widgetCacheDir, second!.moduleUrl), "utf8");
     expect(compiled).toContain("version-two");
     expect(compiled).not.toContain("version-one");
+  });
+
+  it("does not cache a compile whose tree changed again before it was published", async () => {
+    const { rootDir, extensionsDir, widgetCacheDir, widgetFile } = await createWorkspace();
+    const versions = ["version-one", "version-two", "version-three", "version-four"];
+    let generation = 0;
+    const compile = vi.fn(async (options: Parameters<typeof compileExtensionModule>[0]) => {
+      const result = await compileExtensionModule(options);
+      if (options.kind === "widget" && generation < versions.length - 1) {
+        generation += 1;
+        await writeFile(widgetFile, widgetSource(versions[generation]!));
+        // A new path changes the tree even when two writes share a timestamp.
+        await writeFile(join(dirname(widgetFile), `bump-${generation}.txt`), `${generation}`);
+      }
+      return result;
+    });
+    const changed = vi.fn();
+    const catalog = createExtensionModuleCatalog({
+      rootDir,
+      extensionsDir,
+      mode: "compiled",
+      widgetCacheDir,
+      compile,
+    });
+    catalogs.push(catalog);
+    catalog.onChanged(changed);
+
+    const [raced] = await catalog.list();
+    const racedCompiled = await readFile(cachePath(widgetCacheDir, raced!.moduleUrl), "utf8");
+    expect(racedCompiled).toContain("version-three");
+    expect(racedCompiled).not.toContain("version-four");
+    expect(changed).toHaveBeenCalled();
+
+    const [reloaded] = await catalog.list();
+    const reloadedCompiled = await readFile(cachePath(widgetCacheDir, reloaded!.moduleUrl), "utf8");
+    expect(reloadedCompiled).toContain("version-four");
+    expect(reloaded?.moduleUrl).not.toBe(raced?.moduleUrl);
+
+    const compilesAfterReload = compile.mock.calls.length;
+    await catalog.list();
+    await catalog.get();
+    expect(compile).toHaveBeenCalledTimes(compilesAfterReload);
   });
 
   async function createWorkspace(options: { symlink?: boolean } = {}) {

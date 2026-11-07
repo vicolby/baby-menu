@@ -80,12 +80,20 @@ export function createExtensionModuleCatalog(options: ExtensionModuleCatalogOpti
     const widgets = await discoverWidgetModules(discoverOptions);
     const layout = await discoverLayoutModule(discoverOptions);
     const after = await extensionTreeFingerprint(resolvedExtensionsDir);
-    // A write landed while we were compiling. Compile again so the cached
-    // descriptors match the tree we are about to publish.
-    if (before !== after && attempt + 1 < MAX_COMPILE_ATTEMPTS) return loadSnapshot(attempt + 1);
+    if (before !== after) {
+      if (attempt + 1 < MAX_COMPILE_ATTEMPTS) return loadSnapshot(attempt + 1);
+      snapshot = null;
+      return { widgets, layout, fingerprint: after };
+    }
     const value = { widgets, layout, fingerprint: after };
     snapshot = value;
     return value;
+  }
+
+  function replayDeferredCheck(): void {
+    if (!checkAgain || checking || pending || !snapshot) return;
+    checkAgain = false;
+    void checkForChanges();
   }
 
   async function readSnapshot(): Promise<Snapshot> {
@@ -102,9 +110,9 @@ export function createExtensionModuleCatalog(options: ExtensionModuleCatalogOpti
       pending = current;
     }
     const loaded = await current;
-    // The caller already has the fresh descriptors. Other renderers still need
-    // the shared signal, because nothing polls for it.
-    if (ownsLoad && hadSnapshot) notifyChanged();
+    // Nothing polls for discovery, so a renderer only reloads when told.
+    if (ownsLoad && (hadSnapshot || snapshot === null)) notifyChanged();
+    if (ownsLoad) replayDeferredCheck();
     return loaded;
   }
 
@@ -116,21 +124,24 @@ export function createExtensionModuleCatalog(options: ExtensionModuleCatalogOpti
     }
     checking = true;
     try {
-      // Already invalidated, or not loaded yet. The next list() compiles once
-      // and picks up every edit that landed in the meantime.
-      if (!snapshot) return;
+      if (!snapshot) {
+        checkAgain = true;
+        return;
+      }
       const fingerprint = await extensionTreeFingerprint(resolvedExtensionsDir);
-      if (!started || !snapshot || snapshot.fingerprint === fingerprint) return;
+      if (!started) return;
+      if (!snapshot) {
+        checkAgain = true;
+        return;
+      }
+      if (snapshot.fingerprint === fingerprint) return;
       snapshot = null;
       notifyChanged();
     } catch (error) {
       console.error("[baby-menu] extension module check failed", error);
     } finally {
       checking = false;
-      if (checkAgain) {
-        checkAgain = false;
-        void checkForChanges();
-      }
+      replayDeferredCheck();
     }
   }
 
