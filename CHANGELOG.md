@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.27](https://github.com/vicolby/baby-menu/compare/baby-menu-v0.1.26...baby-menu-v0.1.27) (2026-11-07)
+
+
+### Features
+
+* mark the pinned widget drag strip with a grip ([78ce843](https://github.com/vicolby/baby-menu/commit/78ce8435bd6a602b47b03c26d2ac4ac04eb47485))
+* **renderer:** mark the pinned drag strip with a quiet grip ([4d3858a](https://github.com/vicolby/baby-menu/commit/4d3858a6c2f950891f49fc233247241767c1fd3e))
+
 ## [0.1.26](https://github.com/vicolby/baby-menu/compare/baby-menu-v0.1.25...baby-menu-v0.1.26) (2026-11-07)
 
 
