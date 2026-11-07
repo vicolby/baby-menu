@@ -3,11 +3,13 @@
   <a href="https://github.com/vicolby/baby-menu/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/vicolby/baby-menu/ci.yml?style=flat-square&label=ci" /></a>
   <a href="https://img.shields.io/badge/platform-macOS-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square" /></a>
   <a href="https://img.shields.io/badge/electron-42-9feaf9?style=flat-square"><img alt="Electron" src="https://img.shields.io/badge/electron-42-9feaf9?style=flat-square" /></a>
-  <a href="https://x.com/kunchenguid"><img alt="X" src="https://img.shields.io/badge/X-@kunchenguid-black?style=flat-square" /></a>
-  <a href="https://discord.gg/Wsy2NpnZDu"><img alt="Discord" src="https://img.shields.io/discord/1439901831038763092?style=flat-square&label=discord" /></a>
 </p>
 
 <h3 align="center">Adopt a baby menu and help it grow.</h3>
+
+> [!NOTE]
+> This is a clone of Kun Chen's [kunchenguid/baby-menu](https://github.com/kunchenguid/baby-menu), developed separately.
+> It has its own releases and Homebrew tap, and changes here are not coordinated with the original project.
 
 <p align="center">
   <img
