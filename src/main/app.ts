@@ -250,7 +250,7 @@ export async function startBabyMenuApp(): Promise<void> {
   });
   const persistedPreferences = await preferences.apply();
 
-  // Built-in claude/codex agents are driven by the bundled clean-room ACP
+  // Built-in claude/codex/grok agents are driven by the bundled clean-room ACP
   // adapters. Run them with the bundled Electron as Node (ELECTRON_RUN_AS_NODE)
   // so there is no dependency on a separately-installed `node` - the same class
   // of PATH fragility that made the agent look "unavailable" before.

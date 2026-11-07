@@ -7,7 +7,7 @@ import { logDebug, logError } from "./log.js";
 
 /**
  * A generic ACP agent (server) that bridges acpx (the client) to a backend CLI
- * via a `SessionDriver`. Both the Claude and Codex adapters share this wiring;
+ * via a `SessionDriver`. The Claude, Codex, and Grok adapters share this wiring;
  * only the driver differs.
  *
  * baby-menu runs a single persistent session per process (fixed sessionKey), so
@@ -40,7 +40,7 @@ export class BridgeAgent implements Agent {
   }
 
   // baby-menu drives already-authenticated CLIs (the user's installed claude /
-  // codex), so there is nothing to authenticate at the ACP layer.
+  // codex / grok), so there is nothing to authenticate at the ACP layer.
   async authenticate(_params: schema.AuthenticateRequest): Promise<schema.AuthenticateResponse> {
     return {};
   }
