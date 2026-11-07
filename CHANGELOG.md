@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.26](https://github.com/vicolby/baby-menu/compare/baby-menu-v0.1.25...baby-menu-v0.1.26) (2026-11-07)
+
+
+### Features
+
+* **adapters:** add a grok agent provider ([397ea9b](https://github.com/vicolby/baby-menu/commit/397ea9b5c5b2b8bfe302df8e95410723dd7ca31f))
+* add a grok agent provider ([d7cc9bf](https://github.com/vicolby/baby-menu/commit/d7cc9bf4aa51c8f2b18a69993a3cadd050ec89c9))
+
 ## [0.1.25](https://github.com/vicolby/baby-menu/compare/baby-menu-v0.1.24...baby-menu-v0.1.25) (2026-11-07)
 
 
