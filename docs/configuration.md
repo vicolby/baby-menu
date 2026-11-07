@@ -13,8 +13,9 @@ Read-only or otherwise invalid targets are skipped with a log message instead of
 
 ## Choosing an agent
 
-Baby Menu detects supported agents in order: Claude Code (`claude`), then Codex (`codex`).
-Both run through bundled clean-room ACP adapters that drive the authenticated local CLI without inheriting user-level settings, skills, MCP servers, or extra rules.
+Baby Menu detects supported agents in order: Claude Code (`claude`), Codex (`codex`), then Grok (`grok`).
+Claude Code and Codex run through bundled clean-room ACP adapters that drive the authenticated local CLI without inheriting user-level settings, skills, MCP servers, or extra rules.
+Grok uses the same kind of adapter over `grok -p`. It stays off the shared Grok leader, disables plan mode, subagents, memory, workflows, managed MCP, and Claude/Cursor compatibility scans for that process. Grok has no equivalent of Codex `--ignore-user-config`, so personal `~/.grok` MCP servers, skills, plugins, and permission rules still apply, and a trusted project folder still contributes its Grok project config. A user deny rule can still block an edit.
 
 | Mechanism | Effect |
 | --- | --- |
@@ -23,7 +24,7 @@ Both run through bundled clean-room ACP adapters that drive the authenticated lo
 | `agents.json` | Override or append catalog entries manually. |
 
 If a send fails, the popover shows bounded, actionable guidance instead of raw provider diagnostics or a generic unavailable hint.
-For built-in agents, authentication failures prompt you to run `codex login` or launch `claude` and complete sign-in before trying again.
+For built-in agents, authentication failures prompt you to run `codex login`, run `grok login`, or launch `claude` and complete sign-in before trying again.
 If the failed turn edited files before stopping, Baby Menu keeps those partial changes available for Keep or Undo; a failed turn with no file changes closes cleanly.
 
 ### Codex model exception
@@ -34,7 +35,7 @@ The Codex adapter reads only the top-level `model` from `$CODEX_HOME/config.toml
 
 Add agents from Settings (id, optional label, ACP launch command) or by editing `agents.json` directly.
 Packaged mode reads `~/.baby-menu/agents.json`; source mode reads `agents.json` at the repo root.
-Settings-added agents are editable and removable; built-in Claude Code and Codex stay read-only.
+Settings-added agents are editable and removable; built-in Claude Code, Codex, and Grok stay read-only.
 
 Each entry is an object with `name`, optional `label`, `command`, `installHint`, and `launchCommand`.
 Entries with `launchCommand` register as custom [`acpx`](https://github.com/openclaw/acpx) overrides and show as available.

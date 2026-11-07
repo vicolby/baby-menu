@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * End-to-end proof that the bundled clean-room adapters drive the REAL claude /
- * codex CLIs over ACP, exactly as acpx does (raw JSON-RPC 2.0 over NDJSON on the
+ * codex / grok CLIs over ACP, exactly as acpx does (raw JSON-RPC 2.0 over NDJSON on the
  * child's stdio). Gated: only runs when the wrapped CLI exists AND
  * RUN_REAL_AGENT_E2E=1 is set, because it spawns the real agent (network +
  * tokens). Build the adapters first (`pnpm build` or `node scripts/build-adapters.mjs`).
@@ -107,6 +107,18 @@ describe.skipIf(!RUN)("adapter e2e against the real CLIs", () => {
     "codex adapter streams a real answer and ends the turn",
     async () => {
       const entry = join(ADAPTERS, "codex", "index.mjs");
+      expect(existsSync(entry), "build adapters first").toBe(true);
+      const { text, stopReason } = await runOnePrompt(entry, "Reply with exactly the word: pong");
+      expect(text.toLowerCase()).toContain("pong");
+      expect(stopReason).toBe("end_turn");
+    },
+    180_000,
+  );
+
+  it.skipIf(!cliExists("grok"))(
+    "grok adapter streams a real answer and ends the turn",
+    async () => {
+      const entry = join(ADAPTERS, "grok", "index.mjs");
       expect(existsSync(entry), "build adapters first").toBe(true);
       const { text, stopReason } = await runOnePrompt(entry, "Reply with exactly the word: pong");
       expect(text.toLowerCase()).toContain("pong");

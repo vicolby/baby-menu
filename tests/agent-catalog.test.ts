@@ -13,9 +13,9 @@ import {
 } from "../src/main/agent-catalog";
 
 describe("agent-catalog", () => {
-  it("ships claude and codex as the built-in agents (no pi)", () => {
-    expect(DEFAULT_AGENTS.map((agent) => agent.name)).toEqual(["claude", "codex"]);
-    expect(DEFAULT_AGENTS.map((agent) => agent.adapter)).toEqual(["claude", "codex"]);
+  it("ships claude, codex, and grok as the built-in agents (no pi)", () => {
+    expect(DEFAULT_AGENTS.map((agent) => agent.name)).toEqual(["claude", "codex", "grok"]);
+    expect(DEFAULT_AGENTS.map((agent) => agent.adapter)).toEqual(["claude", "codex", "grok"]);
   });
 
   it("derives Settings availability by probing each agent's wrapped CLI", () => {
@@ -25,7 +25,7 @@ describe("agent-catalog", () => {
     };
     const options = toAgentOptions(DEFAULT_AGENTS, available(["claude"]));
     const byName = Object.fromEntries(options.map((o) => [o.name, o.available]));
-    expect(byName).toEqual({ claude: true, codex: false });
+    expect(byName).toEqual({ claude: true, codex: false, grok: false });
   });
 
   it("merges agents.json definitions over built-ins and appends new ones", () => {
@@ -56,6 +56,9 @@ describe("agent-catalog", () => {
     expect(wired.find((a) => a.name === "codex")?.launchCommand).toBe(
       "/usr/bin/node /app/out/adapters/codex/index.js",
     );
+    expect(wired.find((a) => a.name === "grok")?.launchCommand).toBe(
+      "/usr/bin/node /app/out/adapters/grok/index.js",
+    );
   });
 
   it("supports an Electron-as-node launcher and quotes paths with spaces", () => {
@@ -85,7 +88,7 @@ describe("agent-catalog", () => {
     const wired = withAdapterLaunchCommands(DEFAULT_AGENTS, (a) => `/o/${a}.js`, ["node"]);
     const options = toAgentOptions(wired, (command) => command === "claude");
     const byName = Object.fromEntries(options.map((o) => [o.name, o.available]));
-    expect(byName).toEqual({ claude: true, codex: false });
+    expect(byName).toEqual({ claude: true, codex: false, grok: false });
   });
 
   it("builds registry overrides from launchCommand (adapter-wired and custom)", () => {
@@ -94,6 +97,7 @@ describe("agent-catalog", () => {
     expect(overrides).toEqual({
       claude: "node /o/claude.js",
       codex: "node /o/codex.js",
+      grok: "node /o/grok.js",
       custom: "node custom.js",
     });
   });
@@ -114,7 +118,7 @@ describe("agent-catalog", () => {
   });
 
   it("exposes the built-in agent names", () => {
-    expect(BUILT_IN_AGENT_NAMES).toEqual(new Set(["claude", "codex"]));
+    expect(BUILT_IN_AGENT_NAMES).toEqual(new Set(["claude", "codex", "grok"]));
   });
 
   it("toAgentOptions flags custom agents and exposes their launch command", () => {
@@ -148,6 +152,7 @@ describe("agent-catalog", () => {
     it("rejects names that collide with a built-in", () => {
       expect(() => validateCustomAgentInput({ name: "claude", command: "x" }, [])).toThrow(/built-in/i);
       expect(() => validateCustomAgentInput({ name: "Codex", command: "x" }, [])).toThrow(/built-in/i);
+      expect(() => validateCustomAgentInput({ name: "grok", command: "x" }, [])).toThrow(/built-in/i);
     });
 
     it("rejects a duplicate custom name (case-insensitive)", () => {

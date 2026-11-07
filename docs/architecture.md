@@ -52,8 +52,9 @@ An unchanged `server.ts` module instance stays alive across invokes and backgrou
 ## Agent runtime
 
 - **Bundled ACP adapters.**
-  Built-in Claude Code and Codex launch `out/adapters/<name>/index.mjs`, wrapping the local authenticated CLI in isolation from user-level agent config.
-  Codex still reuses only the top-level `model` from `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) so `--ignore-user-config` does not force an unsupported default.
+  Built-in Claude Code, Codex, and Grok launch `out/adapters/<name>/index.mjs`, wrapping the local authenticated CLI.
+  Claude Code and Codex stay isolated from user-level agent config. Codex still reuses only the top-level `model` from `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) so `--ignore-user-config` does not force an unsupported default.
+  Grok runs `grok -p --output-format streaming-json` with `--no-leader`, bypass permissions, and plan, subagent, and memory disabled. Personal `~/.grok` MCP, skills, plugins, and permission rules still apply, because Grok has no ignore-user-config switch. See [Configuration](configuration.md#choosing-an-agent).
 - **Terminal failure semantics.**
   CLI, authentication, rate-limit, and provider failures reject through ACP with typed, bounded messages; raw provider payloads are never streamed or logged as user-facing errors.
   Baby Menu also treats a completed ACP refusal as a failed editing turn, records failed diagnostics and telemetry, and strips nested transport error wrappers before displaying the safe message.
@@ -103,7 +104,7 @@ An unchanged `server.ts` module instance stays alive across invokes and backgrou
   The Homebrew Cask relaunches Baby Menu after an upgrade only when it was already running.
 - **Anonymous telemetry.**
   When a Umami host and website id are configured, packaged builds fire best-effort Umami events for app start, popover open (also a `/popover` page view), agent turn status, and agent switches.
-  Built-in agents report as `claude` or `codex`; custom agents report only as `custom`.
+  Built-in agents report as `claude`, `codex`, or `grok`; custom agents report only as `custom`.
 
 ## Security boundaries
 
@@ -161,7 +162,7 @@ Public extension surfaces are deliberate, tested contracts:
 
 | Path                        | What lives here                                                                        |
 | --------------------------- | -------------------------------------------------------------------------------------- |
-| `src/adapters/`             | Bundled clean-room ACP adapters for built-in Claude Code and Codex agents              |
+| `src/adapters/`             | Bundled clean-room ACP adapters for built-in Claude Code, Codex, and Grok agents       |
 | `src/main/`                 | Electron lifecycle, tray, popover, IPC, git, agent runtime, update checks              |
 | `src/preload/index.ts`      | The stable `window.babyMenu` bridge                                                    |
 | `src/renderer/`             | React UI: `AgentChat`, `WidgetHost`, custom layouts, settings, updates, layout reloads, app controls |

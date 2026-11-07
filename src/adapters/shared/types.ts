@@ -25,15 +25,17 @@ export class AdapterTurnError extends Error {
   }
 }
 
-type AdapterName = "Claude" | "Codex";
+type AdapterName = "Claude" | "Codex" | "Grok";
 
 export function providerTurnError(agent: AdapterName, detail: unknown): AdapterTurnError {
   const text = typeof detail === "string" ? detail : "";
-  if (/\b401\b|unauthorized|authentication|not logged in|missing bearer/i.test(text)) {
+  if (/\b401\b|unauthorized|authentication|not logged in|not signed in|no cached credentials|missing bearer/i.test(text)) {
     const message =
       agent === "Codex"
         ? "Codex is not authenticated. Run `codex login` and try again."
-        : "Claude is not authenticated. Run `claude` and complete sign-in, then try again.";
+        : agent === "Grok"
+          ? "Grok is not authenticated. Run `grok login` and try again."
+          : "Claude is not authenticated. Run `claude` and complete sign-in, then try again.";
     return new AdapterTurnError("AUTHENTICATION_FAILED", message);
   }
   if (/\b429\b|rate.?limit|quota/i.test(text)) {
@@ -61,8 +63,8 @@ export type MapResult = {
 };
 
 /**
- * Backend-agnostic session driver. Each adapter (claude, codex) implements this
- * over its CLI; the generic ACP agent drives it.
+ * Backend-agnostic session driver. Each adapter (claude, codex, grok) implements
+ * this over its CLI; the generic ACP agent drives it.
  */
 export interface SessionDriver {
   /** Start (or lazily prepare) the backend for a session rooted at `cwd`. */

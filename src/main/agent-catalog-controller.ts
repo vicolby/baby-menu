@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import type { BabyMenuCustomAgentInput } from "../shared/contracts";
 import {
   type AgentDefinition,
+  type BuiltInAdapterName,
   type AgentOption,
   agentRegistryOverrides,
   customAgentToDefinition,
@@ -17,7 +18,7 @@ import {
 export type AgentCatalogControllerOptions = {
   /** Path to the user-owned agents.json (repo root in dev, ~/.baby-menu packaged). */
   agentsJsonPath: string;
-  resolveAdapterPath: (adapter: "claude" | "codex") => string;
+  resolveAdapterPath: (adapter: BuiltInAdapterName) => string;
   adapterLauncher: string[];
   commandExists: (command: string) => boolean;
   /** The currently selected agent name; removal of the active agent is refused. */

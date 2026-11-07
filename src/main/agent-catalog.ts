@@ -18,8 +18,10 @@ export type AgentDefinition = {
    * path differs dev vs packaged), while availability still probes `command`
    * (the underlying CLI the adapter drives).
    */
-  adapter?: "claude" | "codex";
+  adapter?: BuiltInAdapterName;
 };
+
+export type BuiltInAdapterName = "claude" | "codex" | "grok";
 
 export type AgentOption = {
   name: string;
@@ -44,6 +46,13 @@ export const DEFAULT_AGENTS: readonly AgentDefinition[] = [
     command: "codex",
     adapter: "codex",
     installHint: "Install the Codex CLI, then restart Baby Menu.",
+  },
+  {
+    name: "grok",
+    label: "Grok",
+    command: "grok",
+    adapter: "grok",
+    installHint: "Install the Grok CLI, then restart Baby Menu.",
   },
 ];
 
@@ -145,7 +154,7 @@ export function resolveAgentCatalog(options: ResolveAgentCatalogOptions = {}): A
  */
 export function withAdapterLaunchCommands(
   catalog: readonly AgentDefinition[],
-  resolveAdapterPath: (adapter: "claude" | "codex") => string,
+  resolveAdapterPath: (adapter: BuiltInAdapterName) => string,
   launcher: string[] = ["node"],
 ): AgentDefinition[] {
   return catalog.map((agent) => {

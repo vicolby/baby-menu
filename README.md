@@ -33,7 +33,7 @@ You ask for a feature in plain English, the agent writes an extension and it hot
 
 ## Quick Start
 
-Requires macOS 13 Ventura or newer, Homebrew, and a supported, already-authenticated agent CLI such as `claude` or `codex` on `PATH`.
+Requires macOS 13 Ventura or newer, Homebrew, and a supported, already-authenticated agent CLI such as `claude`, `codex`, or `grok` on `PATH`.
 
 ```sh
 brew install --cask vicolby/tap/baby-menu
@@ -108,7 +108,7 @@ For agent selection, custom ACP agents, telemetry, and environment flags, see [d
   For live or system data, recipe guidance requires the agent to inspect the real source before parsing it and verify the finished widget against that same data before reporting done.
   The bundled quota recipes cover Claude Code, Codex, Cursor, GitHub Copilot, and Grok.
   Cursor, GitHub Copilot, and Grok quota recipes avoid separate quota helpers such as `quota-axi`; each recipe is authoritative for its provider-owned state, API, and credential-refresh contract.
-- **Bundled ACP adapters** - built-in Claude Code and Codex run through clean-room adapters isolated from user-level agent configuration.
+- **Bundled ACP adapters** - built-in Claude Code, Codex, and Grok run through clean-room adapters. Claude Code and Codex stay isolated from user-level agent configuration. Grok stays off the shared leader, and personal `~/.grok` settings still apply.
 - **Diff-derived Keep / Undo** - the change bar reflects the actual git or snapshot diff, not agent wording, and clears itself when nothing changed on disk.
 - **Extensions own their capabilities** - widgets, layouts, settings sections, server actions, background tasks, and a shared SQLite store, all behind the stable bridge.
 

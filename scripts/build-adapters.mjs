@@ -10,7 +10,7 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const adapters = ["claude", "codex"];
+const adapters = ["claude", "codex", "grok"];
 
 await build({
   entryPoints: Object.fromEntries(
