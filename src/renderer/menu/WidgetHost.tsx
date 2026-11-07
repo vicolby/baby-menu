@@ -167,18 +167,11 @@ function useRuntimeWidgets(options: Parameters<typeof useRuntimeWidgetList>[0]) 
   return useRuntimeWidgetList(options).widgets;
 }
 
-// Reloads widget and layout discovery when main reports a real file change, and
-// again when the popover opens. Pinned windows share the file-change event.
-// There is no timer: a repeat list with nothing new on disk must not transpile.
+// Reloads widget and layout discovery when main reports a real file change.
+// Pinned windows share that signal. There is no timer: a repeat list with
+// nothing new on disk must not transpile.
 function subscribeToRuntimeReload(refresh: () => void): () => void {
-  const unsubscribeModules = window.babyMenu?.widgets.onModulesChanged?.(refresh);
-  const unsubscribeVisibility = window.babyMenu?.popover.onVisibility?.(({ visible }) => {
-    if (visible) refresh();
-  });
-  return () => {
-    unsubscribeModules?.();
-    unsubscribeVisibility?.();
-  };
+  return window.babyMenu?.widgets.onModulesChanged?.(refresh) ?? (() => undefined);
 }
 
 // Loads the root layout module alongside widget discovery. Returns null when

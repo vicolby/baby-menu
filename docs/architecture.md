@@ -31,7 +31,7 @@ Provider-specific acquisition and refresh contracts live in the matching recipe.
 `export const background` in `server.ts` runs on a host-owned timer (60-second minimum) for work that must continue while the popover is closed.
 
 **Module discovery.**
-The main process caches widget and layout descriptors. A debounced `fs.watch` on the extensions directory, plus a mtime/size walk about once a minute that does not transpile, invalidates that cache when files change. Open renderers, including pinned windows, reload discovery on that shared signal and when the popover opens.
+The main process caches widget and layout descriptors. A debounced `fs.watch` on the extensions directory, plus a mtime/size walk about once a minute that does not transpile, invalidates that cache when files change. Open renderers, including pinned windows, reload discovery on that shared signal.
 
 **Extension contracts.**
 Widgets conform to `BabyMenuWidget` / `RefreshableBabyMenuWidget`; `WidgetHost` owns visible-widget refresh timing via `useViewRefresh` and the main-process popover visibility signal, so widgets never start their own polling.

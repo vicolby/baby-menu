@@ -91,7 +91,7 @@ describe("WidgetHost", () => {
     expect(await screen.findByText("hello world")).toBeTruthy();
   });
 
-  it("reloads widgets and layout when modules change or the popover opens, not on a timer", async () => {
+  it("reloads widgets and layout when modules change, not on a timer or when the popover opens", async () => {
     vi.useFakeTimers({ toFake: ["setInterval"] });
     const cpuWidget: RefreshableBabyMenuWidget = {
       id: "cpu-temp",
@@ -147,7 +147,7 @@ describe("WidgetHost", () => {
     await act(async () => {
       for (const listener of visibilityListeners) listener({ visible: true });
     });
-    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
-    expect(getLayout).toHaveBeenCalledTimes(3);
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(getLayout).toHaveBeenCalledTimes(2);
   });
 });
