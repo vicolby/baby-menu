@@ -4,8 +4,8 @@ import type { UpdateStatus } from "../shared/contracts";
 // so "is there a newer version" is answered by the public GitHub releases API.
 // There is no in-app auto-updater; the indicator just points the user at the
 // release page, which is where the cask upgrade instructions live.
-const DEFAULT_REPO = "kunchenguid/baby-menu";
-// Matches the cadence used elsewhere in Kun's apps: a check at most every 4 hours.
+const DEFAULT_REPO = "vicolby/baby-menu";
+// A check at most every 4 hours.
 const DEFAULT_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 export type UpdateChecker = {

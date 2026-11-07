@@ -1,6 +1,6 @@
 <h1 align="center">baby-menu</h1>
 <p align="center">
-  <a href="https://github.com/kunchenguid/baby-menu/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kunchenguid/baby-menu/ci.yml?style=flat-square&label=ci" /></a>
+  <a href="https://github.com/vicolby/baby-menu/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/vicolby/baby-menu/ci.yml?style=flat-square&label=ci" /></a>
   <a href="https://img.shields.io/badge/platform-macOS-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square" /></a>
   <a href="https://img.shields.io/badge/electron-42-9feaf9?style=flat-square"><img alt="Electron" src="https://img.shields.io/badge/electron-42-9feaf9?style=flat-square" /></a>
   <a href="https://x.com/kunchenguid"><img alt="X" src="https://img.shields.io/badge/X-@kunchenguid-black?style=flat-square" /></a>
@@ -34,7 +34,7 @@ You ask for a feature in plain English, the agent writes an extension and it hot
 Requires macOS 13 Ventura or newer, Homebrew, and a supported, already-authenticated agent CLI such as `claude` or `codex` on `PATH`.
 
 ```sh
-brew install --cask kunchenguid/tap/baby-menu
+brew install --cask vicolby/tap/baby-menu
 open -a "Baby Menu"
 ```
 
@@ -52,6 +52,8 @@ Reloading the layout remounts the widget canvas and root layout while preserving
 Settings lets you toggle launch-at-login, pick the embedded agent, and manage custom ACP agents.
 
 ## Install Details
+
+Releases are ad-hoc signed and not notarized, so the cask clears the quarantine attribute after install to let Gatekeeper launch the app.
 
 The packaged app stores extensions, the local database, caches, agent sessions, and preferences under `~/.baby-menu`, so upgrades preserve user-created widgets and extension state. Baby Menu refreshes its provider-neutral managed defaults from the release on each launch.
 If `~/.baby-menu/extensions` is a symlink, Baby Menu seeds bundled defaults and compiles widget or layout CSS from the resolved writable target while leaving the symlink itself in place.

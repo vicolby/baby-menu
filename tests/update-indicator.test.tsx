@@ -15,7 +15,7 @@ const updateAvailable: UpdateStatus = {
   currentVersion: "0.1.7",
   latestVersion: "0.2.0",
   updateAvailable: true,
-  releaseUrl: "https://github.com/kunchenguid/baby-menu/releases/tag/v0.2.0",
+  releaseUrl: "https://github.com/vicolby/baby-menu/releases/tag/v0.2.0",
 };
 
 describe("UpdateIndicator", () => {

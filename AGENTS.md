@@ -31,7 +31,7 @@ Detail lives in the docs: `docs/architecture.md` (runtime design, security bound
 
 ## Packaging hygiene for automation
 
-- Local `pnpm package:mac` builds carry the `Baby Menu Dev` / `com.kunchenguid.baby-menu.dev` identity; never change that to the production identity.
+- Local `pnpm package:mac` builds carry the `Baby Menu Dev` / `com.vicolby.baby-menu.dev` identity; never change that to the production identity.
 - In `no-mistakes` worktrees or any throwaway checkout, delete the entire `release/` directory before finishing, so LaunchServices cannot register a stale `.app`.
 - Never set a locally built bundle as a macOS login item and never install one into `/Applications`. The released app ships only through the Homebrew cask.
 

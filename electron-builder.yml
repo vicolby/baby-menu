@@ -1,4 +1,4 @@
-appId: com.kunchenguid.baby-menu
+appId: com.vicolby.baby-menu
 productName: Baby Menu
 copyright: Copyright © 2026 Kun Chen
 
@@ -38,11 +38,12 @@ asarUnpack:
 mac:
   category: public.app-category.developer-tools
   icon: assets/app-icon.icns
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: assets/entitlements.mac.plist
-  entitlementsInherit: assets/entitlements.mac.plist
-  notarize: true
+  # There is no Apple Developer ID, so electron-builder does not sign and
+  # scripts/adhoc-sign-mac-app.mjs ad-hoc signs every Mach-O after packaging.
+  # Hardened runtime stays off: its library validation rejects ad-hoc signed
+  # frameworks, which carry no Team ID.
+  identity: null
+  notarize: false
   x64ArchFiles: Contents/Resources/app.asar.unpacked/node_modules/{@tailwindcss/oxide-*/**,lightningcss-*/**,lightningcss/**}
 
 dmg:

@@ -102,7 +102,7 @@ An unchanged `server.ts` module instance stays alive across invokes and backgrou
   The main process checks the latest GitHub Release at most every four hours, stays silent on failure, and shows the upgrade command only when a newer release exists.
   The Homebrew Cask relaunches Baby Menu after an upgrade only when it was already running.
 - **Anonymous telemetry.**
-  Packaged builds fire best-effort Umami events for app start, popover open (also a `/popover` page view), agent turn status, and agent switches.
+  When a Umami host and website id are configured, packaged builds fire best-effort Umami events for app start, popover open (also a `/popover` page view), agent turn status, and agent switches.
   Built-in agents report as `claude` or `codex`; custom agents report only as `custom`.
 
 ## Security boundaries
@@ -153,7 +153,7 @@ Public extension surfaces are deliberate, tested contracts:
 | `src/main/shell-path.ts` | Expands `PATH` for GUI launches so packaged apps find agent CLIs |
 | `src/main/update-checker.ts` | GitHub Release check (at most every 4 hours); simulates an available update in source/dev mode |
 | `src/main/recipe-loader.ts` | Discovers `recipes/*.html` and extracts titles |
-| `src/main/telemetry.ts` | Fire-and-forget Umami events; host and website id injected at build time by `electron.vite.config.ts`, no-op when unset |
+| `src/main/telemetry.ts` | Fire-and-forget Umami events; host and website id injected at build time by `electron.vite.config.ts`, no-op unless both are set |
 | `src/renderer/extension-modules.ts` | Runtime loader for widget and layout modules, including packaged stylesheet injection |
 | `src/renderer/settings/settings-sections.ts` | Collects `BabyMenuSettingsSection` exports, sorted by extension id |
 

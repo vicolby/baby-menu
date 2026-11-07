@@ -30,7 +30,7 @@ async function runReleaseDraftGuard(releaseState: "true" | "false" | "missing" |
     return await execFileAsync("/bin/bash", ["-c", await releaseDraftGuard()], {
       env: {
         ...process.env,
-        GITHUB_REPOSITORY: "kunchenguid/baby-menu",
+        GITHUB_REPOSITORY: "vicolby/baby-menu",
         TAG_NAME: "baby-menu-v0.1.23",
         GH_RELEASE_STATE: releaseState,
         PATH: `${tempDirectory}:${process.env.PATH ?? ""}`,
@@ -130,32 +130,31 @@ describe("distribution config", () => {
     expect(packageJson.scripts?.["package:mac"]).toContain("--config electron-builder.dev.yml");
     const devConfig = await readFile(resolve(import.meta.dirname, "../electron-builder.dev.yml"), "utf8");
     expect(devConfig).toContain("extends: ./electron-builder.yml");
-    expect(devConfig).toContain("appId: com.kunchenguid.baby-menu.dev");
+    expect(devConfig).toContain("appId: com.vicolby.baby-menu.dev");
     expect(devConfig).toContain("productName: Baby Menu Dev");
   });
 
-  it("configures production Developer ID signing and keeps local packages ad-hoc", async () => {
+  it("ad-hoc signs release and local packages without Developer ID or notarization", async () => {
     const config = await readFile(resolve(import.meta.dirname, "../electron-builder.yml"), "utf8");
     const electronViteConfig = await readFile(resolve(import.meta.dirname, "../electron.vite.config.ts"), "utf8");
-    const devConfig = await readFile(resolve(import.meta.dirname, "../electron-builder.dev.yml"), "utf8");
-    const entitlements = await readFile(resolve(import.meta.dirname, "../assets/entitlements.mac.plist"), "utf8");
     const localSigner = await readFile(
       resolve(import.meta.dirname, "../scripts/adhoc-sign-mac-app.mjs"),
       "utf8",
     );
 
-    expect(config).toContain("appId: com.kunchenguid.baby-menu");
+    expect(config).toContain("appId: com.vicolby.baby-menu");
     expect(config).toContain("to: extensions-template");
     expect(config).toContain("babymenu-env.d.ts");
     expect(config).toContain("hello-world/**");
     expect(config).toContain("to: tray");
     expect(config).toContain("baby_menuTemplate*.png");
-    expect(config).not.toContain("identity: null");
-    expect(config).toContain("hardenedRuntime: true");
-    expect(config).toContain("gatekeeperAssess: false");
-    expect(config).toContain("entitlements: assets/entitlements.mac.plist");
-    expect(config).toContain("entitlementsInherit: assets/entitlements.mac.plist");
-    expect(config).toContain("notarize: true");
+    // Without a Developer ID, electron-builder must not sign; the ad-hoc signer
+    // signs every Mach-O after packaging. Hardened runtime would enforce library
+    // validation, which ad-hoc signatures (no Team ID) cannot satisfy.
+    expect(config).toContain("identity: null");
+    expect(config).toContain("notarize: false");
+    expect(config).not.toContain("hardenedRuntime: true");
+    expect(config).not.toContain("entitlements");
     expect(config).toContain("icon: assets/app-icon.icns");
     expect(config).toContain("!node_modules/esbuild/**");
     expect(config).toContain("!node_modules/@esbuild/**");
@@ -164,8 +163,6 @@ describe("distribution config", () => {
     expect(electronViteConfig).not.toContain('exclude: ["acpx"]');
     expect(packageJson.devDependencies?.["@electron/asar"]).toBe("3.4.1");
 
-    expect(devConfig).toContain("identity: null");
-    expect(devConfig).toContain("notarize: false");
     expect(packageJson.scripts?.["package:mac"]).toContain("CSC_IDENTITY_AUTO_DISCOVERY=false");
     expect(localSigner).toContain('spawnSync("file", ["-b", candidate]');
     expect(localSigner).toContain('right.split("/").length - left.split("/").length');
@@ -173,15 +170,14 @@ describe("distribution config", () => {
     expect(localSigner.indexOf('run("codesign", ["--force", "--sign", "-", candidate])'))
       .toBeLessThan(localSigner.indexOf('run("codesign", ["--force", "--deep", "--sign", "-", appPath])'));
 
-    const entitlementKeys = [...entitlements.matchAll(/<key>(com\.apple\.security\.[^<]+)<\/key>/g)]
-      .map((match) => match[1]);
-    expect(entitlementKeys).toEqual(["com.apple.security.cs.allow-jit"]);
-    expect(entitlements).not.toContain("com.apple.security.cs.allow-unsigned-executable-memory");
+    await expect(stat(resolve(import.meta.dirname, "../assets/entitlements.mac.plist"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await expect(stat(resolve(import.meta.dirname, "../assets/app-icon.svg")).then((file) => file.isFile())).resolves.toBe(true);
     await expect(stat(resolve(import.meta.dirname, "../assets/app-icon.icns")).then((file) => file.isFile())).resolves.toBe(true);
   });
 
-  it("signs, notarizes, and verifies the publication-ready DMG before publishing it", async () => {
+  it("ad-hoc signs and verifies the publication-ready DMG before publishing it", async () => {
     const workflow = await readFile(resolve(import.meta.dirname, "../.github/workflows/release-please.yml"), "utf8");
     const packagedRuntimeE2e = await readFile(
       resolve(import.meta.dirname, "../scripts/e2e-packaged-mac-app.mjs"),
@@ -194,57 +190,44 @@ describe("distribution config", () => {
     expect(workflow).toContain("baby-menu-release-created: ${{ steps.release.outputs.release_created }}");
     expect(workflow).toContain("baby-menu-tag-name: ${{ steps.release.outputs.tag_name }}");
     expect(workflow).toContain("baby-menu-version: ${{ steps.release.outputs.version }}");
-    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
-    expect(workflow).toContain("needs.release-please.outputs.baby-menu-release-created == 'true'");
-    expect(workflow).toContain("group: ${{ github.workflow }}-macos-${{ inputs.tag_name");
+    expect(workflow).toContain("if: ${{ needs.release-please.outputs.baby-menu-release-created == 'true' }}");
+    expect(workflow).toContain("group: ${{ github.workflow }}-macos-${{ needs.release-please.outputs.baby-menu-tag-name }}");
     expect(workflow).toContain("cancel-in-progress: false");
-    expect(workflow).toContain("github.event_name == 'workflow_dispatch' && github.sha || format('refs/tags/{0}', env.TAG_NAME)");
-    expect(workflow).toContain('if [ "$GITHUB_REF" != "refs/heads/main" ]');
-    expect(workflow).toContain('if [ "$TAG_NAME" != "baby-menu-v0.1.23" ] || [ "$VERSION" != "0.1.23" ]');
-    expect(workflow).toContain('ACTUAL_COMMIT="$(git rev-parse HEAD)"');
-    expect(workflow).toContain('if [ "$ACTUAL_COMMIT" != "$GITHUB_SHA" ]');
-    expect(workflow).toContain('PACKAGE_VERSION="$(node -p "require(\'./package.json\').version")"');
-    expect(workflow).toContain('if [ "$PACKAGE_VERSION" != "$VERSION" ]');
-    expect(workflow).not.toContain('EXPECTED_COMMIT="a8fd9cf3cda01277358a8b5e225e2ace7b0c0593"');
-    expect(workflow).toContain("TEAM_ID: 9T2J7MNUP9");
-    expect(workflow).toContain("BUNDLE_ID: com.kunchenguid.baby-menu");
-    for (const secret of [
-      "MAC_DEVELOPER_ID_CERT_P12",
-      "MAC_DEVELOPER_ID_CERT_PASSWORD",
-      "APP_STORE_CONNECT_KEY_ID",
-      "APP_STORE_CONNECT_ISSUER_ID",
-      "APP_STORE_CONNECT_API_KEY",
+    expect(workflow).toContain("ref: ${{ format('refs/tags/{0}', env.TAG_NAME) }}");
+    expect(workflow).not.toContain("workflow_dispatch");
+    expect(workflow).toContain("BUNDLE_ID: com.vicolby.baby-menu");
+
+    // No Apple Developer account: nothing may depend on Developer ID or notarization.
+    for (const removed of [
+      "TEAM_ID",
+      "Developer ID",
+      "MAC_DEVELOPER_ID_CERT",
+      "APP_STORE_CONNECT",
+      "notarytool",
+      "stapler",
+      "spctl",
+      "verify-macos-entitlements",
+      "kunchenguid",
     ]) {
-      expect(workflow).toContain(`secrets.${secret}`);
-      expect(workflow).toContain(`Missing ${secret}`);
+      expect(workflow).not.toContain(removed);
     }
-    expect(workflow).toContain("CSC_LINK: ${{ steps.developer_id_cert.outputs.csc_link }}");
-    expect(workflow).toContain("CSC_KEY_PASSWORD: ${{ secrets.MAC_DEVELOPER_ID_CERT_PASSWORD }}");
-    expect(workflow).toContain("APPLE_API_KEY: ${{ steps.asc-key.outputs.key_path }}");
-    expect(workflow).toContain("pnpm exec electron-builder --mac dir --universal");
-    expect(workflow).not.toContain("codesign --force --deep --sign -");
-    expect(workflow).toContain("xcrun notarytool submit \"$DMG_PATH\"");
-    expect(workflow).toContain("--wait");
-    expect(workflow).toContain('xcrun stapler staple "$DMG_PATH"');
-    expect(workflow).toContain("Verify publication-ready signed and notarized DMG");
+
+    expect(workflow).toContain("CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --mac dir --universal");
+    expect(workflow).toContain('node scripts/adhoc-sign-mac-app.mjs "release/mac-universal/Baby Menu.app"');
+    expect(workflow.indexOf("pnpm exec electron-builder --mac dir --universal"))
+      .toBeLessThan(workflow.indexOf("node scripts/adhoc-sign-mac-app.mjs"));
+    expect(workflow).toContain("BABY_MENU_UMAMI_HOST: ${{ vars.BABY_MENU_UMAMI_HOST }}");
+    expect(workflow).toContain("BABY_MENU_UMAMI_WEBSITE_ID: ${{ vars.BABY_MENU_UMAMI_WEBSITE_ID }}");
+
+    expect(workflow).toContain("Verify publication-ready ad-hoc signed DMG");
     expect(workflow).toContain('codesign --verify --deep --strict --verbose=4 "$APP_PATH"');
-    expect(workflow).toContain('TeamIdentifier=$TEAM_ID');
-    expect(workflow).toContain('Identifier=$BUNDLE_ID');
-    expect(workflow).toContain("Authority=Developer ID Application: Kun Chen ($TEAM_ID)");
-    expect(workflow).toContain("flags=.*runtime");
-    expect(workflow).toContain("^Timestamp=.+$");
+    expect(workflow).toContain("Identifier=$BUNDLE_ID");
+    expect(workflow).toContain("Signature=adhoc");
     expect(workflow).toContain("verify_code_object");
     expect(workflow).toContain('codesign -d --arch "$architecture" --verbose=4 "$code_object"');
     expect(workflow).toContain('verify_code_object "$candidate" arm64');
     expect(workflow).toContain('verify_code_object "$candidate" x86_64');
     expect(workflow).toContain('verify_code_object "$candidate" "$expected_architecture"');
-    expect(workflow).toContain("verify_entitlements");
-    expect(workflow).toContain('python3 scripts/verify-macos-entitlements.py');
-    expect(workflow).toContain('--arch "$architecture" --entitlements - --xml');
-    expect(workflow).toContain("--require-jit");
-    expect(workflow).toContain('Contents/MacOS/*|Contents/Frameworks/*.app/Contents/MacOS/*)');
-    expect(workflow).toContain('verify_entitlements "$candidate" arm64 "$require_jit"');
-    expect(workflow).toContain('verify_entitlements "$candidate" x86_64 "$require_jit"');
     expect(workflow).toContain("verify_macho_architectures");
     expect(workflow).toContain('if [ "$architectures" = "arm64 x86_64" ]');
     expect(workflow).not.toContain("node_modules/@esbuild/");
@@ -254,42 +237,33 @@ describe("distribution config", () => {
     expect(workflow).toContain('if [ ! -f "$counterpart" ]');
     expect(workflow).toContain("Missing paired $counterpart_architecture native prebuilt");
     expect(workflow).toContain("file -b \"$candidate\"");
-    expect(workflow).toContain('spctl --assess --type execute --verbose=4 "$APP_PATH"');
-    expect(workflow).toContain("source=Notarized Developer ID");
-    expect(workflow).toContain('xcrun stapler validate "$APP_PATH"');
-    expect(workflow).toContain('xcrun stapler validate "$DMG_PATH"');
     expect(workflow).toContain('node scripts/e2e-packaged-mac-app.mjs "$APP_PATH"');
     expect(packagedRuntimeE2e).toContain('from "@electron/asar"');
     expect(packagedRuntimeE2e).toContain("assertNoPackagedEsbuild");
     expect(packagedRuntimeE2e).toContain("window.babyMenu.agent.send");
     expect(packagedRuntimeE2e).toContain("agent:prompt:done");
     expect(workflow).toContain("CFBundleShortVersionString");
-    expect(workflow).toContain('lipo "$APP_EXECUTABLE" -verify_arch arm64 x86_64');
+    expect(workflow).toContain('ARCHITECTURES="$(lipo -archs "$APP_EXECUTABLE"');
     expect(workflow).toContain('ARCHITECTURES" != "arm64 x86_64"');
 
     expect(workflow).toContain("Verify release is still draft");
     expect(workflow).toContain('gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"');
     expect(workflow).not.toContain('releases/tags/${TAG_NAME}');
-    expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("tag_name:");
-    expect(workflow).toContain("version:");
 
-    const recoveryTargetIndex = workflow.indexOf("Validate manual recovery target");
     const checkoutIndex = workflow.indexOf("actions/checkout@v6");
-    const recoverySourceIndex = workflow.indexOf("Verify manual recovery source");
-    const credentialsIndex = workflow.indexOf("Restore App Store Connect API key");
-    expect(recoveryTargetIndex).toBeGreaterThan(-1);
-    expect(checkoutIndex).toBeGreaterThan(recoveryTargetIndex);
-    expect(recoverySourceIndex).toBeGreaterThan(checkoutIndex);
-    expect(credentialsIndex).toBeGreaterThan(recoverySourceIndex);
+    const draftGuardIndex = workflow.indexOf("Verify release is still draft");
+    const packageIndex = workflow.indexOf("Package and ad-hoc sign macOS app");
+    expect(checkoutIndex).toBeGreaterThan(-1);
+    expect(draftGuardIndex).toBeGreaterThan(checkoutIndex);
+    expect(packageIndex).toBeGreaterThan(draftGuardIndex);
 
-    const verifyIndex = workflow.indexOf("Verify publication-ready signed and notarized DMG");
+    const verifyIndex = workflow.indexOf("Verify publication-ready ad-hoc signed DMG");
     const runtimeE2eIndex = workflow.indexOf('node scripts/e2e-packaged-mac-app.mjs "$APP_PATH"');
     const checksumIndex = workflow.indexOf("Compute SHA256");
     const uploadIndex = workflow.indexOf("Upload DMG to draft release");
     const publishIndex = workflow.indexOf("Publish verified release");
     const caskIndex = workflow.indexOf("Update Homebrew Cask");
-    expect(verifyIndex).toBeGreaterThan(-1);
+    expect(verifyIndex).toBeGreaterThan(packageIndex);
     expect(runtimeE2eIndex).toBeGreaterThan(verifyIndex);
     expect(checksumIndex).toBeGreaterThan(runtimeE2eIndex);
     expect(uploadIndex).toBeGreaterThan(checksumIndex);
@@ -302,18 +276,23 @@ describe("distribution config", () => {
 
     expect(workflow).toContain("gh release upload");
     expect(workflow).toContain("HOMEBREW_TAP_TOKEN");
+    expect(workflow).toContain("github.com/vicolby/homebrew-tap.git");
+    expect(workflow).toContain('url "https://github.com/vicolby/baby-menu/releases/download/${TAG_NAME}/Baby-Menu-${VERSION}-universal.dmg"');
+    expect(workflow).toContain('homepage "https://github.com/vicolby/baby-menu"');
     expect(workflow).toContain("Casks/baby-menu.rb");
     expect(workflow).toContain("git diff --cached --quiet");
-    expect(workflow).toContain("xattr");
+    // The ad-hoc signed app is not notarized, so the cask must strip quarantine
+    // or Gatekeeper refuses to launch it.
+    expect(workflow).toContain('args: ["-cr", "#{appdir}/Baby Menu.app"]');
     expect(workflow).toContain('"~/.baby-menu"');
-    expect(workflow).toContain('uninstall quit: "com.kunchenguid.baby-menu"');
+    expect(workflow).toContain('"~/Library/Preferences/com.vicolby.baby-menu.plist"');
+    expect(workflow).toContain('uninstall quit: "com.vicolby.baby-menu"');
     expect(workflow).toContain("uninstall_preflight do");
     expect(workflow).toContain('system("/usr/bin/pgrep", "-x", "Baby Menu"');
     expect(workflow).toContain('nohup", args: ["/bin/sh", "-c"');
     expect(workflow).toContain('while [ -e "#{appdir}/Baby Menu.app" ]; do');
     expect(workflow).toContain('/usr/bin/open -a "#{appdir}/Baby Menu.app"');
     expect(workflow).not.toContain("baby-menu.relaunch");
-    expect(workflow).not.toContain("/tmp/com.kunchenguid.baby-menu");
     expect(workflow).not.toContain("tags:");
     await expect(stat(resolve(import.meta.dirname, "../.github/workflows/release.yml"))).rejects.toMatchObject({
       code: "ENOENT",

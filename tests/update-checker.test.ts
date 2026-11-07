@@ -23,17 +23,17 @@ describe("compareSemver", () => {
 describe("parseLatestRelease", () => {
   it("extracts the version (without v) and release page url", () => {
     expect(
-      parseLatestRelease({ tag_name: "v0.2.0", html_url: "https://github.com/kunchenguid/baby-menu/releases/tag/v0.2.0" }),
-    ).toEqual({ version: "0.2.0", url: "https://github.com/kunchenguid/baby-menu/releases/tag/v0.2.0" });
+      parseLatestRelease({ tag_name: "v0.2.0", html_url: "https://github.com/vicolby/baby-menu/releases/tag/v0.2.0" }),
+    ).toEqual({ version: "0.2.0", url: "https://github.com/vicolby/baby-menu/releases/tag/v0.2.0" });
   });
 
   it("extracts the version from component-prefixed release tags", () => {
     expect(
       parseLatestRelease({
         tag_name: "baby-menu-v0.2.0",
-        html_url: "https://github.com/kunchenguid/baby-menu/releases/tag/baby-menu-v0.2.0",
+        html_url: "https://github.com/vicolby/baby-menu/releases/tag/baby-menu-v0.2.0",
       }),
-    ).toEqual({ version: "0.2.0", url: "https://github.com/kunchenguid/baby-menu/releases/tag/baby-menu-v0.2.0" });
+    ).toEqual({ version: "0.2.0", url: "https://github.com/vicolby/baby-menu/releases/tag/baby-menu-v0.2.0" });
   });
 
   it("returns null when the payload has no usable tag", () => {
@@ -60,6 +60,17 @@ describe("createUpdateChecker", () => {
       releaseUrl: "https://example.test/rel",
     });
     expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("checks the vicolby/baby-menu releases by default", async () => {
+    const fetchImpl = vi.fn(release("v0.2.0"));
+    const checker = createUpdateChecker({ currentVersion: "0.1.7", fetchImpl, now: () => 0 });
+
+    await checker.getStatus();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.github.com/repos/vicolby/baby-menu/releases/latest",
+      expect.anything(),
+    );
   });
 
   it("reports an update from component-prefixed release tags", async () => {
@@ -153,9 +164,9 @@ describe("createUpdateChecker", () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("offline");
     });
-    const checker = createUpdateChecker({ currentVersion: "0.1.0", repo: "kunchenguid/baby-menu", fetchImpl, now: () => 0, openExternal });
+    const checker = createUpdateChecker({ currentVersion: "0.1.0", repo: "vicolby/baby-menu", fetchImpl, now: () => 0, openExternal });
 
     await checker.openReleasePage();
-    expect(openExternal).toHaveBeenCalledWith("https://github.com/kunchenguid/baby-menu/releases/latest");
+    expect(openExternal).toHaveBeenCalledWith("https://github.com/vicolby/baby-menu/releases/latest");
   });
 });

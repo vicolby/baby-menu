@@ -6,7 +6,7 @@ End users should install the Homebrew Cask (see the [README](../README.md#quick-
 ## Setup
 
 ```sh
-git clone https://github.com/kunchenguid/baby-menu.git
+git clone https://github.com/vicolby/baby-menu.git
 cd baby-menu
 pnpm install
 pnpm dev
@@ -64,7 +64,7 @@ These complement the user-facing flags in [configuration.md](configuration.md#en
 ## Packaging
 
 - `pnpm package:mac` tests the actual packaged app from `release/mac-universal/Baby Menu Dev.app`.
-- Local packaging uses the `Baby Menu Dev` product name and `com.kunchenguid.baby-menu.dev` bundle id so local builds do not shadow the released `/Applications/Baby Menu.app` in macOS LaunchServices. It explicitly disables Developer ID discovery and notarization, then applies an ad-hoc signature for local launch only.
+- Local packaging uses the `Baby Menu Dev` product name and `com.vicolby.baby-menu.dev` bundle id so local builds do not shadow the released `/Applications/Baby Menu.app` in macOS LaunchServices. Like release builds, it disables signing in electron-builder and then applies an ad-hoc signature with `scripts/adhoc-sign-mac-app.mjs`.
 - See [CONTRIBUTING.md](../CONTRIBUTING.md#release-notes) for the production release and downloaded-artifact verification procedure.
 - The universal package must run on both Intel and Apple Silicon Macs, so packaged runtime native prebuilt dependencies must stay installed for `x64` and `arm64` and stay covered by `electron-builder.yml` `x64ArchFiles` when new native packages are added.
 - `esbuild` is build-time-only and must stay excluded from `electron-builder.yml`. It enters the production dependency graph only through `acpx -> tsx -> esbuild`, but Baby Menu imports the separately published `acpx/runtime` entry, which does not reference `tsx` or acpx's CLI chunk. The adapters are pre-bundled before packaging, while runtime extension compilation uses the shipped `typescript` dependency. `tests/acpx-runtime-dependencies.test.ts` locks the acpx entry-point boundary, and the packaged runtime E2E verifies a real ACP turn with neither `esbuild` nor `@esbuild` present in the app.

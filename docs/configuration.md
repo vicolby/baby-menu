@@ -76,7 +76,7 @@ Fresh installs and upgrades while Baby Menu is closed do not launch the app auto
 
 ## Telemetry
 
-Packaged release builds send anonymous, best-effort usage telemetry to a self-hosted Umami instance.
+Telemetry is off by default. A build sends anonymous, best-effort usage telemetry to a self-hosted Umami instance only when both a host and a website id are configured; the release workflow reads them from the `BABY_MENU_UMAMI_HOST` and `BABY_MENU_UMAMI_WEBSITE_ID` GitHub Actions repository variables.
 
 - **Records:** app startup, popover opens (`/popover` page views plus named events), agent turn outcomes, agent switches.
 - **Never includes:** user/device id, prompts, file contents, generated code, extension data, or local paths.
@@ -94,5 +94,5 @@ Set `BABY_MENU_TELEMETRY=0` in the launch environment to opt out.
 | `BABY_MENU_EXTENSIONS_DIR=<dir>`  | Overrides the active extension workspace in source/dev runs. Dev Tailwind scans only `extensions/` and `extensions-dev/`, so overrides outside those paths need matching `@source` coverage for widget utilities. |
 | `CODEX_HOME=<dir>`                | When Codex is the selected built-in agent, points the adapter at `<dir>/config.toml` for the top-level `model`; other Codex user config is still ignored.                                                         |
 | `BABY_MENU_TELEMETRY=0`           | Disables packaged-release telemetry; `false` and `off` are also accepted                                                                                                                                          |
-| `BABY_MENU_UMAMI_HOST=<url>`      | Overrides the self-hosted Umami endpoint used by telemetry. Source/dev/test builds are no-op unless a website id is also configured.                                                                               |
+| `BABY_MENU_UMAMI_HOST=<url>`      | Overrides or supplies the self-hosted Umami endpoint used by telemetry. Telemetry is a no-op unless both a host and a website id are configured.                                                                  |
 | `BABY_MENU_UMAMI_WEBSITE_ID=<id>` | Overrides or supplies the Umami website id used by telemetry. The release workflow reads this from the GitHub Actions `vars.*` context, not a secret.                                                             |

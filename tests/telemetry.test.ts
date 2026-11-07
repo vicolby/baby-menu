@@ -78,18 +78,14 @@ describe("telemetry config resolution", () => {
     });
   });
 
-  it("falls back to the hardcoded host when neither env nor build host is set", () => {
+  it("disables when no host is configured, even with a website id", () => {
     const config = resolveTelemetryConfig({
-      env: {},
+      env: { BABY_MENU_UMAMI_HOST: "  " },
       buildHost: "",
       buildWebsiteID: "build-id",
     });
 
-    expect(config).toEqual({
-      enabled: true,
-      host: "https://a.kunchenguid.com",
-      websiteID: "build-id",
-    });
+    expect(config).toEqual({ enabled: false, host: "", websiteID: "" });
   });
 
   it("disables when no website id is configured", () => {

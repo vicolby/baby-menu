@@ -18,7 +18,7 @@ Regular contributor PRs without the signature and attestation will not be review
 Fork routing requires `no-mistakes` v1.30.1 or newer.
 This repository's required check also needs `no-mistakes` >= 1.46.0 so the PR body includes structured pipeline step attestation.
 
-1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:kunchenguid/baby-menu.git`).
+1. Fork the repo, then clone the parent repo or set your local `origin` back to the parent repo (`git@github.com:vicolby/baby-menu.git`).
 2. Create a branch and make your changes.
 3. Initialize or refresh the gate with your fork as the push target: `no-mistakes init --fork-url git@github.com:<you>/baby-menu.git`.
 4. Commit your changes.
@@ -35,7 +35,7 @@ See the [no-mistakes quick start](https://kunchenguid.github.io/no-mistakes/star
 - Run `pnpm typecheck`, `pnpm test`, and `pnpm build` before pushing.
 - Run `pnpm generate:contracts` and commit `extensions/babymenu-env.d.ts` after changing extension-facing types or `src/shared/extension-contract-names.ts`.
 - Run `pnpm package:mac` when changing packaging, runtime paths, extension compilation, native dependencies, or release behavior.
-- Local `pnpm package:mac` builds intentionally produce `Baby Menu Dev.app` with bundle id `com.kunchenguid.baby-menu.dev`; release automation uses `electron-builder.yml` directly for the production `Baby Menu.app` identity.
+- Local `pnpm package:mac` builds intentionally produce `Baby Menu Dev.app` with bundle id `com.vicolby.baby-menu.dev`; release automation uses `electron-builder.yml` directly for the production `Baby Menu.app` identity.
 - Follow the universal native-dependency, build-only esbuild exclusion, and packaged runtime verification constraints in [`docs/development.md`](docs/development.md#packaging).
 - Keep `pnpm-lock.yaml` changes with dependency changes.
 - Do not commit generated build output, release artifacts, runtime caches, or dev extension workspaces.
@@ -48,22 +48,19 @@ Baby Menu releases are proposed by release-please after conventional commits lan
 Use prefixes such as `feat:` and `fix:` so release-please can choose the version bump and release notes.
 Mark breaking changes with `!` in the commit type or a `BREAKING CHANGE:` footer.
 Merging the release-please PR creates the version tag and a draft GitHub Release.
-The release-please workflow builds the universal macOS app, signs every code object with `Developer ID Application: Kun Chen (9T2J7MNUP9)`, notarizes and staples the app and DMG, verifies the publication-ready DMG, computes its checksum, uploads it to the draft, and only then publishes the release before updating `kunchenguid/homebrew-tap`.
-Any signing, notarization, verification, packaged runtime, checksum, or GitHub upload failure leaves the release as a draft and stops before stable publication and tap publication. A missing or invalid `HOMEBREW_TAP_TOKEN`, or another tap update failure, occurs after stable publication and fails the workflow without updating Homebrew.
-The generated Homebrew Cask quits Baby Menu during upgrade and relaunches it after installation only when the app was already running before uninstall started.
+The release-please workflow builds the universal macOS app, ad-hoc signs every code object with `scripts/adhoc-sign-mac-app.mjs` (there is no Apple Developer ID, so releases are not notarized), verifies the publication-ready DMG, runs the packaged runtime E2E, computes its checksum, uploads it to the draft, and only then publishes the release before updating `vicolby/homebrew-tap`.
+Any build, signing, verification, packaged runtime, checksum, or GitHub upload failure leaves the release as a draft and stops before stable publication and tap publication. A missing or invalid `HOMEBREW_TAP_TOKEN`, or another tap update failure, occurs after stable publication and fails the workflow without updating Homebrew.
+The generated Homebrew Cask clears the quarantine attribute after install so Gatekeeper launches the non-notarized app, quits Baby Menu during upgrade, and relaunches it after installation only when the app was already running before uninstall started.
 
-Maintainers must keep these repository secrets provisioned from the canonical secure owners:
+Repository configuration:
 
-- `MAC_DEVELOPER_ID_CERT_P12` - base64 of the password-protected Developer ID Application certificate and private key for Team `9T2J7MNUP9`.
-- `MAC_DEVELOPER_ID_CERT_PASSWORD` - the p12 export password.
-- `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_API_KEY` - the App Store Connect API credentials used by `notarytool`; the API key is base64-encoded p8 content.
-- `HOMEBREW_TAP_TOKEN` - write access to `kunchenguid/homebrew-tap` for the final cask update.
+- Secret `HOMEBREW_TAP_TOKEN` - a fine-grained token with Contents read and write access to `vicolby/homebrew-tap`, used for the final cask update.
+- Optional variables `BABY_MENU_UMAMI_HOST` and `BABY_MENU_UMAMI_WEBSITE_ID` - enable packaged-release telemetry only when both are set. They are variables rather than secrets because both are baked into the app.
+- Settings > Actions > General must allow workflows read and write permissions and allow GitHub Actions to create pull requests, so release-please can open its release PR.
 
-Never commit or print credential contents. Missing or malformed secrets fail the real release job; pull-request CI remains secret-free and validates the release config through `tests/release-config.test.ts`.
-Maintainers must also keep the `BABY_MENU_UMAMI_WEBSITE_ID` GitHub Actions repository variable configured for packaged-release telemetry; it is intentionally a variable rather than a secret because the id is baked into the app and sent in Umami payloads.
+Never commit or print credential contents. Pull-request CI remains secret-free and validates the release config through `tests/release-config.test.ts`.
 
-To release, merge the release-please PR and require the `release-please` workflow's macOS job to pass. The release remains a draft until the signed artifact passes verification and runtime E2E, receives a valid checksum, and uploads successfully. Do not upload a replacement DMG or update the tap by hand.
-For the interrupted `0.1.23` release only, manually dispatch the `release-please` workflow from `main` with tag `baby-menu-v0.1.23` and version `0.1.23`. This recovery path builds the immutable workflow-dispatch SHA from `refs/heads/main` without moving the existing tag, requires that commit's package version to remain `0.1.23`, requires the GitHub Release to remain a draft, and reruns the normal signed, notarized, verified build and publish flow. It refuses a dispatch from another ref, any other tag or version, a checkout that differs from the dispatch commit, a mismatched package version, a missing or already-published release, or an uncertain GitHub query result. Normal releases continue building their immutable tags.
+To release, merge the release-please PR and require the `release-please` workflow's macOS job to pass. The release remains a draft until the artifact passes verification and runtime E2E, receives a valid checksum, and uploads successfully. If the macOS job fails, fix the cause and re-run the failed job; do not upload a replacement DMG or update the tap by hand.
 For a post-release check of exactly the downloaded artifact on macOS:
 
 ```sh
@@ -78,26 +75,20 @@ trap 'hdiutil detach "$PWD/verify-baby-menu/mount" >/dev/null' EXIT
 APP="$PWD/verify-baby-menu/mount/Baby Menu.app"
 
 test "$(plutil -extract CFBundleIdentifier raw -o - "$APP/Contents/Info.plist")" = \
-  "com.kunchenguid.baby-menu"
+  "com.vicolby.baby-menu"
 test "$(plutil -extract CFBundleShortVersionString raw -o - "$APP/Contents/Info.plist")" = \
   "$VERSION"
 codesign --verify --deep --strict --verbose=4 "$APP"
 SIGNATURE="$(codesign -d --verbose=4 "$APP" 2>&1)"
-grep -Fq 'Identifier=com.kunchenguid.baby-menu' <<<"$SIGNATURE"
-grep -Fq 'TeamIdentifier=9T2J7MNUP9' <<<"$SIGNATURE"
-grep -Fq 'Authority=Developer ID Application: Kun Chen (9T2J7MNUP9)' <<<"$SIGNATURE"
-grep -Eq '^CodeDirectory .*flags=.*runtime' <<<"$SIGNATURE"
-grep -Eq '^Timestamp=.+$' <<<"$SIGNATURE"
-spctl --assess --type execute --verbose=4 "$APP"
-xcrun stapler validate "$APP"
-xcrun stapler validate "$DMG"
-lipo "$APP/Contents/MacOS/Baby Menu" -verify_arch arm64 x86_64
+grep -Fq 'Identifier=com.vicolby.baby-menu' <<<"$SIGNATURE"
+grep -Fq 'Signature=adhoc' <<<"$SIGNATURE"
+test "$(lipo -archs "$APP/Contents/MacOS/Baby Menu" | tr ' ' '\n' | LC_ALL=C sort | xargs)" = "arm64 x86_64"
 
 hdiutil detach "$PWD/verify-baby-menu/mount"
 trap - EXIT
 ```
 
-The expected Gatekeeper result is `accepted` with source `Notarized Developer ID`. The workflow runs these checks, plus per-bundle and per-Mach-O identity, hardened-runtime, and timestamp checks, against the mounted publication-ready DMG before upload.
+The workflow runs these checks, plus per-bundle and per-Mach-O ad-hoc signature and architecture checks, against the mounted publication-ready DMG before upload.
 
 ## Questions
 

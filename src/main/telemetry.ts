@@ -5,10 +5,9 @@
 // contents, and every network error swallowed so telemetry can never affect the
 // app. The Umami host and website id are injected at build time (see the `define`
 // block in electron.vite.config.ts) and can be overridden at runtime via env
-// vars. With no website id configured (the default in source/dev/test) the client
-// is a no-op, so the app never phones home outside packaged release builds.
+// vars. Unless both a host and a website id are configured the client is a no-op,
+// so the app never phones home by default.
 
-const HARDCODED_FALLBACK_HOST = "https://a.kunchenguid.com";
 const UMAMI_PATH = "/api/send";
 const DEFAULT_HOSTNAME = "app";
 const DEFAULT_TITLE = "Baby Menu";
@@ -62,8 +61,10 @@ export function resolveTelemetryConfig(input: ResolveTelemetryConfigInput): Reso
     return { enabled: false, host: "", websiteID: "" };
   }
 
-  const host =
-    String(input.env.BABY_MENU_UMAMI_HOST || "").trim() || input.buildHost.trim() || HARDCODED_FALLBACK_HOST;
+  const host = String(input.env.BABY_MENU_UMAMI_HOST || "").trim() || input.buildHost.trim();
+  if (!host) {
+    return { enabled: false, host: "", websiteID: "" };
+  }
   return { enabled: true, host, websiteID };
 }
 

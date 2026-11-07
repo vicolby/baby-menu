@@ -4,10 +4,5 @@
 # login items always resolve to the released /Applications copy instead of a
 # stale local build.
 extends: ./electron-builder.yml
-appId: com.kunchenguid.baby-menu.dev
+appId: com.vicolby.baby-menu.dev
 productName: Baby Menu Dev
-
-# Local packages deliberately remain ad-hoc signed and are never notarized.
-mac:
-  identity: null
-  notarize: false
