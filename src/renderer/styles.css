@@ -249,6 +249,28 @@ html[data-pinned] #root {
   -webkit-app-region: drag;
 }
 
+/* Marks the strip so it can be found at rest. It only paints: the whole strip
+   stays the drag region, so it takes no pointer events and no no-drag. */
+.pinned-grip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ink-500);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  /* Balances the letter-spacing trailing the last dot so the dots sit centered. */
+  padding-left: 0.18em;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pinned-shell:hover .pinned-grip {
+  color: var(--ink-300);
+}
+
 .pinned-unpin {
   -webkit-app-region: no-drag;
   opacity: 0;

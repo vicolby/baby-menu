@@ -35,6 +35,7 @@ export function PinnedApp({ widgetId, widgets, runtimeImporter }: PinnedAppProps
   return (
     <main className="app-shell pinned-shell" aria-label={`pinned widget ${widgetId}`}>
       <div className="pinned-handle">
+        <span className="pinned-grip" aria-hidden="true">{"···"}</span>
         <Tooltip content="Unpin from desktop">
           <Button
             variant="ghost"
