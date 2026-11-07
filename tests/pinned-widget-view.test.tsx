@@ -72,6 +72,22 @@ describe("PinnedApp", () => {
     expect(pinned.unpin).toHaveBeenCalledWith("clock");
   });
 
+  it("marks the drag strip with a grip that is not the unpin control", () => {
+    const { pinned } = installBridge(["clock"]);
+    const { container, getByLabelText } = render(<PinnedApp widgetId="clock" widgets={[widget("clock")]} />);
+
+    const grip = container.querySelector(".pinned-handle .pinned-grip");
+    expect(grip?.textContent).toBe("···");
+    expect(grip?.getAttribute("aria-hidden")).toBe("true");
+    const unpin = getByLabelText("unpin from desktop");
+    expect(unpin.contains(grip)).toBe(false);
+    expect(grip?.closest("button")).toBeNull();
+
+    fireEvent.click(unpin);
+
+    expect(pinned.unpin).toHaveBeenCalledWith("clock");
+  });
+
   it("says so, and still lets the user unpin, when the widget no longer exists", () => {
     installBridge(["gone"]);
 
